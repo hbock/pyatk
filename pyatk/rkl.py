@@ -56,16 +56,24 @@ CMD_FL_BBT   = 0x0303
 CMD_FL_INTLV = 0x0304
 CMD_FL_LBA   = 0x0305
 
-ACK_SUCCESS = 0x0000
-ACK_FAILED  = 0xffff
+ACK_SUCCESS      = 0x0000
+#: We received a partial response for a flash command.
+ACK_FLASH_PARTLY = 0x0001
+#: We received an erase response for flash
+ACK_FLASH_ERASE  = 0x0002
+#: We received a verify response for flash
+ACK_FLASH_VERIFY = 0x0003
+ACK_FAILED       = 0xffff
 
 class CommandResponseError(Exception):
-    def __init__(self, command, ackcode):
+    def __init__(self, command, ackcode, payload):
         super(CommandResponseError, self).__init__()
         #: Command code that generated this error.
         self.command = command
         #: Response code from the device.
         self.ack = ackcode
+        #: Payload (if any) following the ACK
+        self.payload = payload
 
     def __str__(self):
         return "Command 0x%04X failed: ack code 0x%04X" % (self.command, self.ack)
@@ -74,6 +82,23 @@ class RAMKernelProtocol(object):
     def __init__(self, channel):
         self.channel = channel
 
+    def _read_response(self):
+        response = self.channel.read(8)
+
+        ack, checksum, length = struct.unpack(">HHI", response)
+
+        # Even if the response was failure, read any additional
+        # data queued up.
+        if length > 0:
+            payload = self.channel.read(length)
+        else:
+            payload = ""
+
+        if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY):
+            raise CommandResponseError(command, ack, payload)
+
+        return ack, checksum, payload
+        
     def _send_command(self, command,
                       address = 0x00000000,
                       param1  = 0x00000000,
@@ -83,21 +108,49 @@ class RAMKernelProtocol(object):
         self.channel.write(rawcmd)
 
         if wait_for_response:
-            response = self.channel.read(8)
-            ack, checksum, length = struct.unpack(">HHI", response)
-            if length > 0:
-                payload = self.channel.read(length)
-            else:
-                payload = ""
-
-            if ack != ACK_SUCCESS:
-                raise CommandResponseError(command, ack)
-
-            return checksum, payload
-
+            return self._read_response()
+            
     def getver(self):
-        imx_type, flash_model = self._send_command(CMD_GETVER)
-        print "imx, flash model =", imx_type, repr(flash_model)
+        """
+        Query the RAM kernel for device type and flash model.
+
+        Returns the tuple ``device_type``, ``flash_model``, with
+        ``device_type`` a 16-bit integer representing the device and
+        ``flash_model`` a string describing the flash model.
+        """
+        _, cs, payload = self._send_command(CMD_GETVER)
+        return cs, payload
+
+    def flash_initial(self):
+        """
+        Initialize the device flash subsystem. This **must** be called prior
+        to any other ``flash_`` method!
+        """
+        self._send_command(CMD_FLASH_INITIAL)
+
+    def flash_dump(self, address, size):
+        """
+        Dump ``size`` bytes of flash starting at address
+        ``address``. Returns a string containing at most ``size``
+        bytes of flash data.
+        """
+        ack, cs, payload = self._send_command(CMD_FLASH_DUMP,
+                                              address = address,
+                                              param1 = size,
+                                              param2 = 0, # follow-up dump (?)
+                                              )
+        total_bytes = len(payload)
+        # If we receive an ACK_FLASH_PARTLY, we are expected to continue
+        # reading command responses until we run out of space.
+        while ack == ACK_FLASH_PARTLY and total_bytes < size:
+            ack, checksum, nextpayload = self._read_response()
+            payload += nextpayload
+            total_bytes += len(nextpayload)
+            
+        return payload
 
     def reset(self):
+        """
+        Reset the device CPU.
+        """
         self._send_command(CMD_RESET, wait_for_response = False)
