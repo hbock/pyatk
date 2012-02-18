@@ -28,7 +28,7 @@ import os
 import sys
 import time
 from pprint import pprint
-from optparse import OptionParser
+from optparse import OptionParser, OptionGroup
 
 from pyatk import channel
 from pyatk import boot
@@ -36,60 +36,102 @@ from pyatk import rkl
 
 DEFAULT_RAM_KERNEL_ADDRESS = 0x80004000
 
-def run_atk(channel, options):
-    sbp = boot.SerialBootProtocol(channel)
-    ramkernel = rkl.RAMKernelProtocol(channel)
+class ToolkitError(Exception):
+    def __init__(self, msg):
+        super(ToolkitError, self).__init__()
+        self.msg = msg
 
-    if options.init_file:
-        initdata = read_initialization_file(options.init_file)
-    else:
-        if options.ram_kernel_file:
-            parser.error("RAM kernel selected, but initialization file missing.")
+    def __str__(self):
+        return self.msg
 
-        initdata = []
+class ToolkitApplication(object):
+    def __init__(self, chan, options):
+        self.channel = chan
+        self.options = options
 
-    try:
-        status = sbp.get_status()
-        print "Boot status: 0x%02X" % status
+        self.sbp = boot.SerialBootProtocol(chan)
+        self.ramkernel = rkl.RAMKernelProtocol(chan)
+        self.mem_init_data = []
 
+    def run(self):
+        self.load_mem_initializer()
+        try:
+            status = self.sbp.get_status()
+            print "Boot status: 0x%02X" % status
+            
+            self.memtest()
+            self.mem_initialize()
+
+            if self.options.ram_kernel_file is not None:
+                self.run_ram_kernel()
+
+            elif self.options.application_file is not None:
+                self.run_application(self.options.application_file, self.options.application_address)
+
+        except boot.CommandResponseError, exc:
+            print "Command response error: %s" % exc
+
+    def load_mem_initializer(self):
+        if self.options.init_file:
+            self.mem_init_data = read_initialization_file(self.options.init_file)
+        elif self.options.ram_kernel_file:
+            raise ToolkitError("RAM kernel selected, but initialization file missing.")
+        
+    def load_application(self, application_file, application_address):
+        pass
+
+    def memtest(self):
         # Initial memory test
-        sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
-        check = sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
+        self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
+        check = self.sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFDEAD != check:
             print "ERROR: SRAM write check failed: got 0x%08X" % check        
 
-        sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
-        check = sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
+        self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
+        check = self.sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFCAFE != check:            
             print "ERROR: SRAM write check failed: got 0x%08X" % check
 
-        for initaddr, initval, initwidth in initdata:
+    def mem_initialize(self):
+        for initaddr, initval, initwidth in self.mem_init_data:
             print "init: write 0x%08X to 0x%08X" % (initval, initaddr)
-            sbp.write_memory(initaddr, initwidth, initval)
-        
-        if options.ram_kernel_file is not None:
-            rk_stat = os.stat(options.ram_kernel_file)
-            with open(options.ram_kernel_file, "rb") as rk_fp:
-                print "writing ram kernel %r to 0x%08X" % (options.ram_kernel_file,
-                                                           options.ram_kernel_address)
-                sbp.write_file(boot.FILE_TYPE_APPLICATION, options.ram_kernel_address,
-                               rk_stat.st_size, rk_fp)
-                sbp.complete_boot()
-                print "RAM kernel write/execute OK!"
-                
-    except boot.CommandResponseError, e:
-        print "Command response error: %s" % e
+            self.sbp.write_memory(initaddr, initwidth, initval)
 
-    if options.ram_kernel_file is not None:
-        print "waiting after ram kernel write..."
+    def run_ram_kernel(self):
+        rk_file = self.options.ram_kernel_file
+        rk_addr = self.options.ram_kernel_address
+
+        print "loading ram kernel %r" % rk_file 
+        self.run_application(rk_file, rk_addr)
+
+        print "waiting after ram kernel start..."
         time.sleep(1)
 
         print "ram kernel getver:"
-        ramkernel.getver()
+        self.ramkernel.getver()
         print "resetting CPU"
-        ramkernel.reset()
+        self.ramkernel.reset()
         time.sleep(1)
-        print "status after reset: 0x%08X" % sbp.get_status()
+        print "status after reset: 0x%08X" % self.sbp.get_status()
+
+    def run_application(self, filename, load_address):
+        appl_stat = os.stat(filename)
+        with open(filename, "rb") as appl_fd:
+            print "Writing application %r to 0x%08X" % (filename, load_address)
+            self.sbp.write_file(boot.FILE_TYPE_APPLICATION,
+                                load_address, appl_stat.st_size, appl_fd)
+            self.sbp.complete_boot()
+            print "Application write/execute OK!"
+
+        if self.options.read_forever:
+            print "Continuously reading from channel. Press Ctrl-C to exit."
+            print
+            start_time = time.time()
+            while True:
+                data = self.channel.read(10)
+                if data != "":
+                    sys.stdout.write(data)
+                    sys.stdout.flush()
 
 def read_initialization_file(filename):
     with open(filename, "r") as initfp:
@@ -112,32 +154,59 @@ def main():
     parser = OptionParser("%prog -s DEVICE [-r ramkernel] [-i init.txt] [application]")
     parser.add_option("--initialization-file", "-i", action = "store",
                       dest = "init_file", metavar = "FILE",
-                      help = "Register initialization file.")
-    parser.add_option("--ram-kernel", "-r", action = "store",
-                      dest = "ram_kernel_file", metavar = "FILE",
-                      help = "RAM kernel helper application binary.")
-    parser.add_option("--ram-kernel-address", "-a", action = "store",
-                      dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
-                      default = DEFAULT_RAM_KERNEL_ADDRESS,
-                      help = ("RAM kernel helper application base address "
-                              "(default DRAM 0x%08X)." % DEFAULT_RAM_KERNEL_ADDRESS))
-    parser.add_option("--serialport", "-s", action = "store",
-                      dest = "serialport", metavar = "DEVICE",
-                      help = "Serial port device name.")
+                      help = "Memory initialization file.")
+    parser.add_option("--appl-file", "-f", action = "store",
+                      dest = "application_file", metavar = "FILE",
+                      help = "Application binary.")
+    parser.add_option("--appl-address", "-a", action = "store",
+                      dest = "application_address", type = "int", metavar = "ADDRESS",
+                      help = ("Application start address."))
+
+    rkgroup = OptionGroup(parser, "RAM Kernel Options")
+    rkgroup.add_option("--ram-kernel", "-k", action = "store",
+                       dest = "ram_kernel_file", metavar = "FILE",
+                       help = "RAM kernel helper application binary.")
+    rkgroup.add_option("--ram-kernel-address", action = "store",
+                       dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
+                       default = DEFAULT_RAM_KERNEL_ADDRESS,
+                       help = ("RAM kernel helper application base address "
+                               "(default DRAM 0x%08X)." % DEFAULT_RAM_KERNEL_ADDRESS))
+
+    comgroup = OptionGroup(parser, "Communications")
+    comgroup.add_option("--serialport", "-s", action = "store",
+                        dest = "serialport", metavar = "DEVICE",
+                        help = "Serial port device name.")
+    comgroup.add_option("--read-forever", "-r", action = "store_true",
+                        dest = "read_forever", default = False,
+                        help  = ("Read continuously from communication channel after "
+                                 "loading application, displaying to terminal."))
+
+    parser.add_option_group(rkgroup)
+    parser.add_option_group(comgroup)
     
     options, args = parser.parse_args()
 
     if not options.serialport:
         parser.error("Please select a serial port.")
 
+    if options.application_file and not options.application_address:
+        parser.error("Application file specified without address.")
+
     serial_channel = channel.UARTChannel(options.serialport)
     serial_channel.open()
-
+    atkprog = ToolkitApplication(serial_channel, options)
     try:
-        run_atk(serial_channel, options)
+        atkprog.run()
 
-    except IOError, e:
-        print "I/O error: %s" % e
+    except KeyboardInterrupt:
+        print "User exit."
+        sys.exit(1)
+
+    except IOError, exc:
+        print "I/O error: %s" % exc
+
+    except ToolkitError, exc:
+        parser.error(str(exc))
 
     finally:
         serial_channel.close()
