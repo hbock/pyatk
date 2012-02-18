@@ -107,8 +107,15 @@ class ToolkitApplication(object):
         print "waiting after ram kernel start..."
         time.sleep(1)
 
+        print "ram kernel initialize flash"
+        self.ramkernel.flash_initial()
         print "ram kernel getver:"
-        self.ramkernel.getver()
+        imxtype, flashmodel = self.ramkernel.getver()
+        print "imx = %u, flash model = %r" % (imxtype, flashmodel)
+
+        print "read flash first page:"
+        flash = self.ramkernel.flash_dump(0x0000, 1024)
+        
         print "resetting CPU"
         self.ramkernel.reset()
         time.sleep(1)
