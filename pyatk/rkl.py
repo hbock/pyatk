@@ -65,7 +65,33 @@ ACK_FLASH_ERASE  = 0x0002
 ACK_FLASH_VERIFY = 0x0003
 ACK_FAILED       = 0xffff
 
-class CommandResponseError(Exception):
+## Flash operation status codes
+FLASH_OK               = 0
+FLASH_ERROR_READ       = 100
+FLASH_ERROR_ECC        = 101
+FLASH_ERROR_PROG       = 102
+FLASH_ERROR_ERASE      = 103
+FLASH_ERROR_VERIFY     = 104
+FLASH_ERROR_INIT       = 105
+FLASH_ERROR_OVER_ADDR  = 106
+FLASH_ERROR_PART_ERASE = 107
+FLASH_ERROR_EOF        = 108
+
+class RAMKernelError(Exception):
+    pass
+
+class ChecksumError(RAMKernelError):
+    def __init__(self, expected_checksum, checksum):
+        #: The checksum returned by the device.
+        self.expected_checksum = expected_checksum
+        #: The checksum calculated on the host.
+        self.checksum = checksum
+
+    def __str__(self):
+        return "Expected checksum 0x%04X, calculated 0x%04X" % (self.expected_checksum,
+                                                                self.checksum)
+
+class CommandResponseError(RAMKernelError):
     def __init__(self, command, ackcode, payload):
         super(CommandResponseError, self).__init__()
         #: Command code that generated this error.
@@ -77,6 +103,14 @@ class CommandResponseError(Exception):
 
     def __str__(self):
         return "Command 0x%04X failed: ack code 0x%04X" % (self.command, self.ack)
+
+def calculate_checksum(buf):
+    """ Perform a simple 16-bit checksum on the bytes in ``buf``. """
+    checksum = 0
+    for byte in buf:
+        checksum = (checksum + ord(byte)) & 0x0000FFFF
+
+    return checksum
 
 class RAMKernelProtocol(object):
     def __init__(self, channel):
@@ -140,10 +174,19 @@ class RAMKernelProtocol(object):
                                               param2 = 0, # follow-up dump (?)
                                               )
         total_bytes = len(payload)
+        mychecksum = calculate_checksum(payload)
+        if mychecksum != cs:
+            raise ChecksumError(cs, mychecksum)
+
         # If we receive an ACK_FLASH_PARTLY, we are expected to continue
         # reading command responses until we run out of space.
         while ack == ACK_FLASH_PARTLY and total_bytes < size:
-            ack, checksum, nextpayload = self._read_response()
+            ack, cs, nextpayload = self._read_response()
+
+            mychecksum = calculate_checksum(payload)
+            if mychecksum != cs:
+                raise ChecksumError(cs, mychecksum)
+
             payload += nextpayload
             total_bytes += len(nextpayload)
             
