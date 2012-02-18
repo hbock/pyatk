@@ -99,7 +99,7 @@ class SerialBootProtocol(object):
         status_raw = self.channel.read(4)
         if len(status_raw) != 4:
             raise CommandResponseError("Expected 4-byte status word, "
-                                       "got %r instead" % binascii.hexlify(status_raw))
+                                       "got %r (%r) instead" % (status_raw, binascii.hexlify(status_raw)))
 
         return struct.unpack("<I", status_raw)[0]
 
@@ -263,7 +263,6 @@ class SerialBootProtocol(object):
         status = self.get_status()
 
         if status != BOOT_PROTOCOL_COMPLETE:
-            print repr(status)
             raise CommandResponseError("Expected boot protocol completion code 0x88888888, "
                                        ", got 0x%08X instead!" % status)
 
