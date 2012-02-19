@@ -214,6 +214,22 @@ class RAMKernelProtocol(object):
             
         return payload
 
+    def flash_get_capacity(self):
+        """
+        Return the device flash capacity in bytes.
+
+        Must be called *after* :meth:`flash_initial`!
+        """
+        # CMD_FLASH_GET_CAPACITY returns the size of flash in the
+        # "length" field, but does not contain a payload.
+        self._send_command(CMD_FLASH_GET_CAPACITY, wait_for_response = False)
+        ack, _, length = self._read_response(read_payload = False)
+
+        if ack != ACK_SUCCESS:
+            raise CommandResponseError(CMD_FLASH_GET_CAPACITY, ack, length)
+
+        return length
+
     def reset(self):
         """
         Reset the device CPU.
