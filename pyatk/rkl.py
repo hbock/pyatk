@@ -169,14 +169,16 @@ class RAMKernelProtocol(object):
         Returns the tuple ``device_type``, ``flash_model``, with
         ``device_type`` a 16-bit integer representing the device and
         ``flash_model`` a string describing the flash model.
+
+        Must be called *after* :meth:`flash_initial`!
         """
-        _, cs, payload = self._send_command(CMD_GETVER)
-        return cs, payload
+        _, checksum, payload = self._send_command(CMD_GETVER)
+        return checksum, payload
 
     def flash_initial(self):
         """
         Initialize the device flash subsystem. This **must** be called prior
-        to any other ``flash_`` method!
+        to any other ``flash_`` method, as well as prior to :meth:`getver`!
         """
         self._send_command(CMD_FLASH_INITIAL)
 
@@ -185,25 +187,27 @@ class RAMKernelProtocol(object):
         Dump ``size`` bytes of flash starting at address
         ``address``. Returns a string containing at most ``size``
         bytes of flash data.
+
+        Must be called *after* :meth:`flash_initial`!
         """
-        ack, cs, payload = self._send_command(CMD_FLASH_DUMP,
-                                              address = address,
-                                              param1 = size,
-                                              param2 = 0, # follow-up dump (?)
-                                              )
+        ack, checksum, payload = self._send_command(CMD_FLASH_DUMP,
+                                                    address = address,
+                                                    param1 = size,
+                                                    param2 = 0, # follow-up dump (?)
+                                                    )
         total_bytes = len(payload)
         mychecksum = calculate_checksum(payload)
-        if mychecksum != cs:
-            raise ChecksumError(cs, mychecksum)
+        if mychecksum != checksum:
+            raise ChecksumError(checksum, mychecksum)
 
         # If we receive an ACK_FLASH_PARTLY, we are expected to continue
         # reading command responses until we run out of space.
         while ack == ACK_FLASH_PARTLY and total_bytes < size:
-            ack, cs, nextpayload = self._read_response()
+            ack, checksum, nextpayload = self._read_response()
 
             mychecksum = calculate_checksum(payload)
-            if mychecksum != cs:
-                raise ChecksumError(cs, mychecksum)
+            if mychecksum != checksum:
+                raise ChecksumError(checksum, mychecksum)
 
             payload += nextpayload
             total_bytes += len(nextpayload)
