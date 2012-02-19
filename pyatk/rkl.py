@@ -99,8 +99,8 @@ class CommandResponseError(RAMKernelError):
         self.command = command
         #: Response code from the device.
         self.ack = ackcode
-        #: Payload (if any) following the ACK
-        self.payload = payload
+        #: Payload (if any) or length parameter following ACK
+        self.payload_or_length = payload
 
     def __str__(self):
         return "Command 0x%04X failed: ack code 0x%04X" % (self.command, self.ack)
@@ -117,22 +117,35 @@ class RAMKernelProtocol(object):
     def __init__(self, channel):
         self.channel = channel
 
-    def _read_response(self):
+    def _read_response(self, read_payload = True):
+        """
+        Read the device response.  If ``read_payload`` is ``True``,
+        a response with a non-zero length field will cause a read
+        of the queued up data, and the function returns ``(ack_code,
+        checksum, payload_string)``.
+
+        If ``read_payload`` is ``False``, only the response header is
+        read.  The function will return ``(ack_code, checksum,
+        length)`` instead.  It is then up to the caller to continue
+        reading using the :attr:`channel` attribute.
+        """
         response = self.channel.read(8)
 
         ack, checksum, length = struct.unpack(">HHI", response)
 
-        # Even if the response was failure, read any additional
-        # data queued up.
-        if length > 0:
-            payload = self.channel.read(length)
+        if read_payload:
+            # Even if the response was failure, read any additional
+            # data queued up.
+            if length > 0:
+                payload = self.channel.read(length)
+            else:
+                payload = ""
+
+        if read_payload:
+            return ack, checksum, payload
+
         else:
-            payload = ""
-
-        if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY):
-            raise CommandResponseError(command, ack, payload)
-
-        return ack, checksum, payload
+            return ack, checksum, length
         
     def _send_command(self, command,
                       address = 0x00000000,
@@ -143,8 +156,12 @@ class RAMKernelProtocol(object):
         self.channel.write(rawcmd)
 
         if wait_for_response:
-            return self._read_response()
-            
+            ack, checksum, payload_or_length = self._read_response()
+            if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY):
+                raise CommandResponseError(command, ack, payload_or_length)
+
+            return ack, checksum, payload_or_length
+
     def getver(self):
         """
         Query the RAM kernel for device type and flash model.
