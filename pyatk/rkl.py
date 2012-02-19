@@ -82,6 +82,7 @@ class RAMKernelError(Exception):
 
 class ChecksumError(RAMKernelError):
     def __init__(self, expected_checksum, checksum):
+        super(ChecksumError, self).__init__()
         #: The checksum returned by the device.
         self.expected_checksum = expected_checksum
         #: The checksum calculated on the host.
