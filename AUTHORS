@@ -1,0 +1,6 @@
+Harry Bock <bock.harryw@gmail.com> 
+ Initial implementation of:
+  - serial comm channel
+  - Freescale serial boot protocol
+  - Freescale RAM kernel protocol
+  - ATK program

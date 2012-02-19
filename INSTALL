@@ -1,0 +1,20 @@
+Required libraries
+------------------
+
+ - pySerial (for RS232 support)
+ - PyUSB (for USB support)
+
+Installing dependencies on Ubuntu
+---------------------------------
+
+ $ sudo apt-get install python-serial python-usb
+
+Running pyATK in-tree
+---------------------
+
+ ~/pyatk $ ./atk.py --help
+
+Installing pyATK
+----------------
+
+Currently, pyATK provides no installation mechanism.
