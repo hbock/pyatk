@@ -57,7 +57,7 @@ class ToolkitApplication(object):
         self.load_mem_initializer()
         try:
             status = self.sbp.get_status()
-            print "Boot status: 0x%02X" % status
+            print "Boot status:", boot.get_status_string(status)
             
             self.memtest()
             self.mem_initialize()
@@ -120,7 +120,7 @@ class ToolkitApplication(object):
         print "resetting CPU"
         self.ramkernel.reset()
         time.sleep(1)
-        print "status after reset: 0x%08X" % self.sbp.get_status()
+        print "status after reset:", boot.get_status_string(self.sbp.get_status())
 
     def run_application(self, filename, load_address):
         appl_stat = os.stat(filename)
