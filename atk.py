@@ -112,6 +112,7 @@ class ToolkitApplication(object):
         print "ram kernel getver:"
         imxtype, flashmodel = self.ramkernel.getver()
         print "imx = %u, flash model = %r" % (imxtype, flashmodel)
+        print "ram kernel flash capacity: %u MB" % (self.ramkernel.flash_get_capacity() / 1024)
 
         print "read flash first page:"
         flash = self.ramkernel.flash_dump(0x0000, 1024)
