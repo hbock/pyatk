@@ -80,7 +80,7 @@ STATUS_CODE_TABLE = {
 
 def get_status_string(code):
     """ Given a HAB status code ``code``, return an associated description. """
-    return STATUS_CODE_TABLE.get(code, "Unknown code")
+    return STATUS_CODE_TABLE.get(code, "Unknown code 0x%08x" % code)
 
 class CommandResponseError(Exception):
     def __init__(self, msg):
@@ -99,7 +99,8 @@ class SerialBootProtocol(object):
         status_raw = self.channel.read(4)
         if len(status_raw) != 4:
             raise CommandResponseError("Expected 4-byte status word, "
-                                       "got %r (%r) instead" % (status_raw, binascii.hexlify(status_raw)))
+                                       "got %r (%r) instead" % (status_raw,
+                                                                binascii.hexlify(status_raw)))
 
         return struct.unpack("<I", status_raw)[0]
 
