@@ -224,7 +224,7 @@ class SerialBootProtocol(object):
             raise CommandResponseError("Received unexpected status instead "
                                        "of ACK: 0x%08X" % ack)
         
-    def write_file(self, filetype, address, length, stream):
+    def write_file(self, filetype, address, length, stream, progress_callback = None):
         command = struct.pack(">HIxI4xB", CMD_WRITE_FILE, address, length, filetype)
         self._write_command(command)
         self._read_ack()
@@ -239,6 +239,9 @@ class SerialBootProtocol(object):
                                  "bytes consumed." % bytes_consumed)
             bytes_consumed += len(chunk)
             self.channel.write(chunk)
+
+            if progress_callback:
+                progress_callback(bytes_consumed, length)
 
     def reenumerate_usb(self, serialnum):
         """
