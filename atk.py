@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Copyright (c) 2012 Harry Bock <bock.harryw@gmail.com>
 # All rights reserved.
 #
@@ -94,7 +95,7 @@ class ToolkitApplication(object):
 
     def mem_initialize(self):
         for initaddr, initval, initwidth in self.mem_init_data:
-            print "init: write 0x%08X to 0x%08X" % (initval, initaddr)
+            print "init: write 0x%08X to 0x%08X (width %d)" % (initval, initaddr, initwidth)
             self.sbp.write_memory(initaddr, initwidth, initval)
 
     def run_ram_kernel(self):
@@ -124,11 +125,20 @@ class ToolkitApplication(object):
 
     def run_application(self, filename, load_address):
         appl_stat = os.stat(filename)
+        image_size = appl_stat.st_size
+        def progcb(current, total):
+            bar_len = 50
+            bar_on = int(float(current) / total * bar_len)
+            bar_off = bar_len - bar_on
+            sys.stdout.write("[%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
+            sys.stdout.flush()
+
         with open(filename, "rb") as appl_fd:
             print "Writing application %r to 0x%08X" % (filename, load_address)
             self.sbp.write_file(boot.FILE_TYPE_APPLICATION,
-                                load_address, appl_stat.st_size, appl_fd)
+                                load_address, image_size, appl_fd, progress_callback = progcb)
             self.sbp.complete_boot()
+            print
             print "Application write/execute OK!"
 
         if self.options.read_forever:
