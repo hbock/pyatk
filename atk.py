@@ -175,7 +175,7 @@ def read_initialization_file(filename):
         return initialization_data
 
 def main():
-    parser = OptionParser("%prog -s DEVICE [-r ramkernel] [-i init.txt] [application]")
+    parser = OptionParser("%prog -s DEVICE [-k ramkernel] [-i init.txt] [application]")
     parser.add_option("--initialization-file", "-i", action = "store",
                       dest = "init_file", metavar = "FILE",
                       help = "Memory initialization file.")
