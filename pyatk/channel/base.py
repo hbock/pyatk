@@ -1,14 +1,17 @@
+"""
+Portable ATK communications channel implementation - base interface
+"""
 # Copyright (c) 2012 Harry Bock <bock.harryw@gmail.com>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met: 
+# modification, are permitted provided that the following conditions are met:
 #
 # 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer. 
+#    list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution. 
+#    and/or other materials provided with the distribution.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 # ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -20,12 +23,8 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-"""
-Portable ATK communications channel implementations (serial, USB)
-"""
-import serial
 
-class ATKChannel(object):
+class ATKChannelI(object):
     def open(self):
         """
         Open the communication channel.
@@ -37,7 +36,7 @@ class ATKChannel(object):
         Close the communication channel.
         """
         raise NotImplementedError()
-    
+
     def read(self, length):
         """
         Read ``length`` bytes from underlying ATK communication
@@ -50,33 +49,4 @@ class ATKChannel(object):
         Write ``data`` binary string to underlying ATK communication
         channel.
         """
-        raise NotImplementedError()    
-
-class UARTChannel(ATKChannel):
-    def __init__(self, port):
-        super(UARTChannel, self).__init__()
-        
-        self.port = None
-        port = serial.serial_for_url(port, do_not_open = True)
-        port.baudrate = 115200
-        port.parity   = serial.PARITY_NONE
-        port.stopbits = serial.STOPBITS_ONE
-        port.bytesize = serial.EIGHTBITS
-        port.timeout  = 0.5
-        port.rtscts   = False
-        port.xonxoff  = False
-        port.dsrdtr   = False
-
-        self.port = port
-
-    def open(self):
-        self.port.open()
-
-    def close(self):
-        self.port.close()
-        
-    def write(self, data):
-        self.port.write(data)
-
-    def read(self, length):
-        return self.port.read(length)
+        raise NotImplementedError()

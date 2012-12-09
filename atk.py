@@ -31,7 +31,7 @@ import time
 from pprint import pprint
 from optparse import OptionParser, OptionGroup
 
-from pyatk import channel
+from pyatk.channel.uart import UARTChannel
 from pyatk import boot
 from pyatk import rkl
 
@@ -216,7 +216,7 @@ def main():
     if options.application_file and not options.application_address:
         parser.error("Application file specified without address.")
 
-    serial_channel = channel.UARTChannel(options.serialport)
+    serial_channel = UARTChannel(options.serialport)
     serial_channel.open()
     atkprog = ToolkitApplication(serial_channel, options)
     try:
