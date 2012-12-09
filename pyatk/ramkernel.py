@@ -143,7 +143,7 @@ class RAMKernelProtocol(object):
         """
         response = self.channel.read(8)
 
-        ack, checksum, length = struct.unpack(">HHI", response)
+        ack, checksum, length = struct.unpack(">hHI", response)
 
         if read_payload:
             # Even if the response was failure, read any additional
