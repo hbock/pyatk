@@ -223,3 +223,17 @@ class RAMKernelTests(unittest.TestCase):
             self.rkl.flash_dump(0x0000, 0x400)
         self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_OVER_ADDR)
         self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_DUMP)
+
+    def test_flash_program_arguments(self):
+        """ Test sanity checks on flash_program """
+        class AVeryLargeObject(object):
+            def __init__(self, length):
+                self.length = length
+            def __len__(self):
+                return self.length
+
+        self.assertRaises(ValueError, self.rkl.flash_program, -1, "asdf")
+        self.assertRaises(ValueError, self.rkl.flash_program, 0,
+                          AVeryLargeObject(ramkernel.FLASH_PROGRAM_MAX_WRITE_SIZE + 1))
+        self.assertRaises(ValueError, self.rkl.flash_program, 0, "")
+        self.assertRaises(ValueError, self.rkl.flash_program, 0, "asdf", file_format = -1)
