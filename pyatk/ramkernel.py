@@ -25,7 +25,6 @@
 Freescale i.MX ATK RAM kernel protocol implementation
 """
 import struct
-import binascii
 
 HEADER_MAGIC = 0x0606
 
