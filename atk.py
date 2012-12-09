@@ -28,12 +28,11 @@ Portable Python ATK implementation
 import os
 import sys
 import time
-from pprint import pprint
 from optparse import OptionParser, OptionGroup
 
 from pyatk.channel.uart import UARTChannel
 from pyatk import boot
-from pyatk import rkl
+from pyatk import ramkernel
 
 DEFAULT_RAM_KERNEL_ADDRESS = 0x80004000
 
@@ -51,7 +50,7 @@ class ToolkitApplication(object):
         self.options = options
 
         self.sbp = boot.SerialBootProtocol(chan)
-        self.ramkernel = rkl.RAMKernelProtocol(chan)
+        self.ramkernel = ramkernel.RAMKernelProtocol(chan)
         self.mem_init_data = []
 
     def run(self):
