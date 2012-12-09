@@ -113,10 +113,16 @@ class ToolkitApplication(object):
         print "ram kernel getver:"
         imxtype, flashmodel = self.ramkernel.getver()
         print "imx = %u, flash model = %r" % (imxtype, flashmodel)
-        print "ram kernel flash capacity: %u MB" % (self.ramkernel.flash_get_capacity() / 1024)
+        print "ram kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
 
         print "read flash first page:"
-        flash = self.ramkernel.flash_dump(0x0000, 1024)
+        flash_page = self.ramkernel.flash_dump(0x0000, 1024)
+        for index, byte in enumerate(flash_page):
+            sys.stderr.write("%02x " % ord(byte))
+            if index % 8 == 7:
+                sys.stderr.write(" ")
+            if index % 16 == 15:
+                sys.stderr.write("\n")
         
         print "resetting CPU"
         self.ramkernel.reset()
