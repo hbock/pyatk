@@ -36,6 +36,19 @@ CMD_FLASH_PROGRAM      = 0x0004
 CMD_FLASH_PROGRAM_UB   = 0x0005
 CMD_FLASH_GET_CAPACITY = 0x0006
 
+#: Normal (raw) file format for flash programming.
+FLASH_FILE_FORMAT_NORMAL = 0
+FLASH_FILE_FORMAT_NB0    = 1
+FLASH_FILE_FORMAT_OPS    = 2
+
+FLASH_PROGRAM_PARAM1_VERIFY = 0x00010000
+FLASH_PROGRAM_PARAM1_GO_ON  = 0x00000100
+
+# The default RAM kernel has an internal buffer of 2 MB.
+# CMD_FLASH_PROGRAM(_UB) requests larger than this size
+# will fail.
+FLASH_PROGRAM_MAX_WRITE_SIZE = (2 * 1024 * 1024)
+
 ## RKL eFUSE commands
 CMD_FUSE_READ     = 0x0101
 CMD_FUSE_SENSE    = 0x0102
@@ -228,6 +241,119 @@ class RAMKernelProtocol(object):
             raise CommandResponseError(CMD_FLASH_GET_CAPACITY, ack, length)
 
         return length
+
+    def flash_erase(self, start_address, size, erase_callback = None):
+        """
+        Erase the flash device, starting at ``start_address`` for ``size``
+        bytes.
+
+        If ``erase_callback`` is not ``None``, it is called for each erased block
+        with arguments ``(block_index, block_size)``.
+
+        **NOTE**: most flash devices will generally erase entire blocks. Block size
+        is dependent on the flash device itself, but is usually many pages (e.g.,
+        128 1 KB pages). If ``size`` does not match the block size boundary,
+        more data will be erased to meet the boundary.
+        """
+        self._send_command(CMD_FLASH_ERASE,
+                           address = start_address,
+                           param1  = size,
+                           param2  = 0,
+                           wait_for_response = False)
+
+        ack = ACK_FLASH_ERASE
+        # The RAM kernel will send ACK_SUCCESS when the erase operation is complete.
+        while ACK_FLASH_ERASE == ack:
+            ack, i, block_size = self._read_response(read_payload = False)
+
+            # For each erased block, an ACK_FLASH_ERASE response is returned
+            # from the RAM kernel specifying which block was erased, and
+            # how big the block size is.
+            if ACK_FLASH_ERASE == ack and erase_callback:
+                erase_callback(i, block_size)
+
+            if ack not in (ACK_FLASH_ERASE, ACK_SUCCESS):
+                raise CommandResponseError(CMD_FLASH_ERASE, ack, block_size)
+
+    def flash_program(self, start_address, data,
+                      file_format = FLASH_FILE_FORMAT_NORMAL,
+                      read_back_verify = False,
+                      program_callback = None):
+        """
+        Program the flash device with ``data`` starting at ``start_address``.
+        The maximum size of ``data`` is :const:`FLASH_PROGRAM_MAX_WRITE_SIZE`;
+        break your write operation into multiple calls to this method.
+
+        If ``read_back_verify`` is ``True``, the flash region to be programmed
+        is read back for verification.
+
+        If ``program_callback`` is specified, it is called for each page successfully
+        written to flash or verified.  ``program_callback`` must take two parameters
+        ``(write_length, total_written)``, where ``write_length`` is the length
+        of the successful partial write operation and ``total_written`` is the total
+        number of bytes written as of the callback.
+        """
+        if start_address < 0:
+            raise ValueError("Invalid start address %r" % start_address)
+
+        if len(data) == 0:
+            raise ValueError("Data length must be non-zero.")
+        if len(data) > FLASH_PROGRAM_MAX_WRITE_SIZE:
+            raise ValueError("Data length is too large - max length is %d bytes." % FLASH_PROGRAM_MAX_WRITE_SIZE)
+
+        if file_format not in (FLASH_FILE_FORMAT_NORMAL,
+                               FLASH_FILE_FORMAT_NB0,
+                               FLASH_FILE_FORMAT_OPS):
+            raise ValueError("Invalid file format %r" % file_format)
+
+        # FIXME: CMD_FLASH_PROGRAM_UB is not used in the supplied RAM kernel for NAND flash.
+        # It seems to be for programming not at page boundaries? (UB = "un-boundary"
+        # in the ATK source code).
+        flash_command = CMD_FLASH_PROGRAM
+
+        flags = file_format
+        if read_back_verify:
+            # flags |= FLASH_PROGRAM_PARAM1_VERIFY
+            # TODO implement me!
+            raise NotImplementedError("read_back_verify not yet implemented.")
+
+        # The initial CMD_FLASH_PROGRAM tells the RAM kernel to prepare for len(data)
+        # bytes to be sent.  It ACKs this initial request before the host sends
+        # any data.
+        self._send_command(flash_command,
+                           address = start_address,
+                           param1 = len(data),
+                           param2 = flags,
+                           wait_for_response = False)
+
+        # We want to explicitly check for ACK_SUCCESS - we should not yet
+        # read back ACK_FLASH_PARTLY
+        ack, checksum, length = self._read_response(read_payload = False)
+        if ACK_SUCCESS != ack:
+            raise CommandResponseError(flash_command, ack, length)
+
+        # Send the entire data block at once. The underlying channel
+        # breaks this into appropriate writeable chunks.
+        self.channel.write(data)
+
+        # Command responses send back the length of the partial write, but do not
+        # include a payload.
+        ack, checksum, length = self._read_response(read_payload = False)
+        if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
+            raise CommandResponseError(flash_command, ack, length)
+
+        total_length = length
+        while ACK_FLASH_PARTLY == ack:
+            if program_callback:
+                program_callback(length, total_length)
+
+            ack, checksum, length = self._read_response(read_payload = False)
+            if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
+                raise CommandResponseError(flash_command, ack, length)
+
+            total_length += length
+
+        # TODO: read back verify messages
 
     def reset(self):
         """
