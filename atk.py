@@ -135,10 +135,20 @@ class ToolkitApplication(object):
         self.ramkernel.flash_initial()
         print "ram kernel getver:"
         imxtype, flashmodel = self.ramkernel.getver()
-        print "imx = %u, flash model = %r" % (imxtype, flashmodel)
-        print "ram kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
+        print "Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel)
+        print "RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
 
-        print "read flash first page:"
+        if self.options.rkl_flash_test:
+            self.ram_kernel_flash_test()
+
+        print("End of RAM kernel test. Resetting CPU.")
+        self.ramkernel.reset()
+        time.sleep(1)
+        print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
+
+    def ram_kernel_flash_test(self):
+        print("Running RKL flash test.")
+        print("read flash first page:")
         start_address = 0x0000
         flash_page = self.ramkernel.flash_dump(start_address, 1024)
         print_hex_dump(flash_page, start_address)
@@ -162,11 +172,6 @@ class ToolkitApplication(object):
         print("Dump after program...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
-
-        print "resetting CPU"
-        self.ramkernel.reset()
-        time.sleep(1)
-        print "status after reset:", boot.get_status_string(self.sbp.get_status())
 
     def run_application(self, filename, load_address):
         appl_stat = os.stat(filename)
@@ -234,6 +239,10 @@ def main():
                        default = DEFAULT_RAM_KERNEL_ADDRESS,
                        help = ("RAM kernel helper application base address "
                                "(default DRAM 0x%08X)." % DEFAULT_RAM_KERNEL_ADDRESS))
+    rkgroup.add_option("--flash-test", "-t", action = "store_true",
+                       dest = "rkl_flash_test",
+                       help = "Test the flash part using the RAM kernel.",
+                       default = False)
 
     comgroup = OptionGroup(parser, "Communications")
     comgroup.add_option("--serialport", "-s", action = "store",
