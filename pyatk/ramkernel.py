@@ -79,15 +79,44 @@ ACK_FAILED       = 0xffff
 
 ## Flash operation status codes
 FLASH_OK               = 0
-FLASH_ERROR_READ       = 100
-FLASH_ERROR_ECC        = 101
-FLASH_ERROR_PROG       = 102
-FLASH_ERROR_ERASE      = 103
-FLASH_ERROR_VERIFY     = 104
-FLASH_ERROR_INIT       = 105
-FLASH_ERROR_OVER_ADDR  = 106
-FLASH_ERROR_PART_ERASE = 107
-FLASH_ERROR_EOF        = 108
+FLASH_FAILED           = -4
+FLASH_ECC_FAILED       = -5
+FLASH_ERROR_READ       = -100
+FLASH_ERROR_ECC        = -101
+FLASH_ERROR_PROG       = -102
+FLASH_ERROR_ERASE      = -103
+FLASH_ERROR_VERIFY     = -104
+FLASH_ERROR_INIT       = -105
+FLASH_ERROR_OVER_ADDR  = -106
+FLASH_ERROR_PART_ERASE = -107
+FLASH_ERROR_EOF        = -108
+
+_ACK_STR_MAP = {
+    # These are not errors
+    ACK_SUCCESS:            "no error",
+    ACK_FLASH_PARTLY:       "in-progress flash operation",
+    ACK_FLASH_ERASE:        "in-progress flash erase",
+    ACK_FLASH_VERIFY:       "in-progress flash verify",
+
+    ACK_FAILED:             "general failure",
+
+    # These errors are specific to flash
+    FLASH_FAILED:           "flash operation failure",
+    FLASH_ECC_FAILED:       "flash ECC failure",
+    FLASH_ERROR_READ:       "error reading flash",
+    FLASH_ERROR_ECC:        "uncorrectable ECC error",
+    FLASH_ERROR_PROG:       "error programming flash",
+    FLASH_ERROR_ERASE:      "error erasing flash",
+    FLASH_ERROR_VERIFY:     "error verifying flash",
+    FLASH_ERROR_INIT:       "error initializing flash part",
+    FLASH_ERROR_OVER_ADDR:  "flash address overflow",
+    FLASH_ERROR_PART_ERASE: "flash partial erase error: potential bad block(s)",
+    FLASH_ERROR_EOF:        "attempt to access flash part past device capacity",
+}
+
+def rkl_strerror(ackcode):
+    """ Return a string corresponding to RAM kernel ACK code ``code``. """
+    return _ACK_STR_MAP.get(ackcode, "unknown error code")
 
 class RAMKernelError(Exception):
     pass
@@ -111,11 +140,13 @@ class CommandResponseError(RAMKernelError):
         self.command = command
         #: Response code from the device.
         self.ack = ackcode
+        #: Human-readable version of ACK code.
+        self.ack_str = rkl_strerror(ackcode)
         #: Payload (if any) or length parameter following ACK
         self.payload_or_length = payload
 
     def __str__(self):
-        return "Command 0x%04X failed: ack code 0x%04X" % (self.command, self.ack)
+        return "Command 0x%04X failed: ack code 0x%04X (%s)" % (self.command, self.ack, self.ack_str)
 
 def calculate_checksum(buf):
     """ Perform a simple 16-bit checksum on the bytes in ``buf``. """
