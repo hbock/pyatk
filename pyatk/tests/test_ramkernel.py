@@ -15,7 +15,7 @@ class RAMKernelTests(unittest.TestCase):
 
         self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_INIT)
         self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_INITIAL)
-        self.assertEqual(cm.exception.payload_or_length, "")
+        self.assertEqual(cm.exception.length, 0)
 
     def test_flash_get_capacity(self):
         self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0xbeef, 2057)

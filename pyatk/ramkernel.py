@@ -144,7 +144,7 @@ class CommandResponseError(RAMKernelError):
     """
     An exception representing an error response from the RAM kernel.
     """
-    def __init__(self, command, ackcode, payload):
+    def __init__(self, command, ackcode, length):
         super(CommandResponseError, self).__init__()
         #: Command code that generated this error.
         self.command = command
@@ -153,7 +153,7 @@ class CommandResponseError(RAMKernelError):
         #: Human-readable version of ACK code.
         self.ack_str = rkl_strerror(ackcode)
         #: Payload (if any) or length parameter following ACK
-        self.payload_or_length = payload
+        self.length = length
 
     def __str__(self):
         return "Command 0x%04X failed: ack code 0x%04X (%s)" % (self.command, self.ack, self.ack_str)
@@ -178,35 +178,14 @@ class RAMKernelProtocol(object):
         """
         self.channel = channel
 
-    def _read_response(self, read_payload = True):
+    def _read_response(self):
         """
-        Read the device response.  If ``read_payload`` is ``True``,
-        a response with a non-zero length field will cause a read
-        of the queued up data, and the function returns ``(ack_code,
-        checksum, payload_string)``.
-
-        If ``read_payload`` is ``False``, only the response header is
-        read.  The function will return ``(ack_code, checksum,
-        length)`` instead.  It is then up to the caller to continue
-        reading using the :attr:`channel` attribute.
+        Read the device response and return
         """
         response = self.channel.read(8)
 
         ack, checksum, length = struct.unpack(">hHI", response)
-
-        if read_payload:
-            # Even if the response was failure, read any additional
-            # data queued up.
-            if length > 0:
-                payload = self.channel.read(length)
-            else:
-                payload = ""
-
-        if read_payload:
-            return ack, checksum, payload
-
-        else:
-            return ack, checksum, length
+        return ack, checksum, length
         
     def _send_command(self, command,
                       address = 0x00000000,
@@ -217,11 +196,11 @@ class RAMKernelProtocol(object):
         self.channel.write(rawcmd)
 
         if wait_for_response:
-            ack, checksum, payload_or_length = self._read_response()
+            ack, checksum, length = self._read_response()
             if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY):
-                raise CommandResponseError(command, ack, payload_or_length)
+                raise CommandResponseError(command, ack, length)
 
-            return ack, checksum, payload_or_length
+            return ack, checksum, length
 
     def getver(self):
         """
@@ -233,7 +212,12 @@ class RAMKernelProtocol(object):
 
         Must be called *after* :meth:`flash_initial`!
         """
-        _, checksum, payload = self._send_command(CMD_GETVER)
+        _, checksum, length = self._send_command(CMD_GETVER)
+        if length > 0:
+            payload = self.channel.read(length)
+        else:
+            payload = ""
+
         return checksum, payload
 
     def flash_initial(self):
@@ -251,29 +235,36 @@ class RAMKernelProtocol(object):
 
         Must be called *after* :meth:`flash_initial`!
         """
-        ack, checksum, payload = self._send_command(CMD_FLASH_DUMP,
-                                                    address = address,
-                                                    param1 = size,
-                                                    param2 = 0, # follow-up dump (?)
-                                                    )
-        total_bytes = len(payload)
-        mychecksum = calculate_checksum(payload)
-        if mychecksum != checksum:
-            raise ChecksumError(checksum, mychecksum)
-
-        # If we receive an ACK_FLASH_PARTLY, we are expected to continue
-        # reading command responses until we run out of space.
-        while ack == ACK_FLASH_PARTLY and total_bytes < size:
-            ack, checksum, nextpayload = self._read_response()
+        payload_list = []
+        def read_payload(length):
+            # Even if the response was failure, read any additional
+            # data queued up.
+            if length > 0:
+                payload = self.channel.read(length)
+            else:
+                payload = ""
 
             mychecksum = calculate_checksum(payload)
             if mychecksum != checksum:
                 raise ChecksumError(checksum, mychecksum)
 
-            payload += nextpayload
-            total_bytes += len(nextpayload)
-            
-        return payload
+            payload_list.append(payload)
+            return len(payload)
+
+        ack, checksum, length = self._send_command(CMD_FLASH_DUMP,
+                                                   address = address,
+                                                   param1 = size,
+                                                   param2 = 0, # follow-up dump (?)
+                                                   )
+        total_bytes = read_payload(length)
+
+        # If we receive an ACK_FLASH_PARTLY, we are expected to continue
+        # reading command responses until we run out of space.
+        while ack == ACK_FLASH_PARTLY and total_bytes < size:
+            ack, checksum, nextlength = self._read_response()
+            total_bytes += read_payload(nextlength)
+
+        return "".join(payload_list)
 
     def flash_get_capacity(self):
         """
@@ -284,12 +275,12 @@ class RAMKernelProtocol(object):
         # CMD_FLASH_GET_CAPACITY returns the size of flash in the
         # "length" field, but does not contain a payload.
         self._send_command(CMD_FLASH_GET_CAPACITY, wait_for_response = False)
-        ack, _, length = self._read_response(read_payload = False)
+        ack, _, capacity = self._read_response()
 
         if ack != ACK_SUCCESS:
-            raise CommandResponseError(CMD_FLASH_GET_CAPACITY, ack, length)
+            raise CommandResponseError(CMD_FLASH_GET_CAPACITY, ack, capacity)
 
-        return length
+        return capacity
 
     def flash_erase(self, start_address, size, erase_callback = None):
         """
@@ -313,7 +304,7 @@ class RAMKernelProtocol(object):
         ack = ACK_FLASH_ERASE
         # The RAM kernel will send ACK_SUCCESS when the erase operation is complete.
         while ACK_FLASH_ERASE == ack:
-            ack, i, block_size = self._read_response(read_payload = False)
+            ack, i, block_size = self._read_response()
 
             # For each erased block, an ACK_FLASH_ERASE response is returned
             # from the RAM kernel specifying which block was erased, and
@@ -377,7 +368,7 @@ class RAMKernelProtocol(object):
 
         # We want to explicitly check for ACK_SUCCESS - we should not yet
         # read back ACK_FLASH_PARTLY
-        ack, checksum, length = self._read_response(read_payload = False)
+        ack, checksum, length = self._read_response()
         if ACK_SUCCESS != ack:
             raise CommandResponseError(flash_command, ack, length)
 
@@ -387,7 +378,7 @@ class RAMKernelProtocol(object):
 
         # Command responses send back the length of the partial write, but do not
         # include a payload.
-        ack, checksum, length = self._read_response(read_payload = False)
+        ack, checksum, length = self._read_response()
         if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
             raise CommandResponseError(flash_command, ack, length)
 
@@ -396,7 +387,7 @@ class RAMKernelProtocol(object):
             if program_callback:
                 program_callback(length, total_length)
 
-            ack, checksum, length = self._read_response(read_payload = False)
+            ack, checksum, length = self._read_response()
             if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
                 raise CommandResponseError(flash_command, ack, length)
 
