@@ -260,9 +260,12 @@ class RAMKernelProtocol(object):
 
         # If we receive an ACK_FLASH_PARTLY, we are expected to continue
         # reading command responses until we run out of space.
-        while ack == ACK_FLASH_PARTLY and total_bytes < size:
-            ack, checksum, nextlength = self._read_response()
-            total_bytes += read_payload(nextlength)
+        while total_bytes < size:
+            ack, checksum, length = self._read_response()
+            if ack != ACK_FLASH_PARTLY:
+                raise CommandResponseError(CMD_FLASH_DUMP, ack, length)
+
+            total_bytes += read_payload(length)
 
         return "".join(payload_list)
 
