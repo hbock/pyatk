@@ -119,9 +119,16 @@ def rkl_strerror(ackcode):
     return _ACK_STR_MAP.get(ackcode, "unknown error code")
 
 class RAMKernelError(Exception):
+    """
+    A generic RAM kernel error.
+    """
     pass
 
 class ChecksumError(RAMKernelError):
+    """
+    An error representing a checksum error has occured when reading data
+    from the RAM kernel.
+    """
     def __init__(self, expected_checksum, checksum):
         super(ChecksumError, self).__init__()
         #: The checksum returned by the device.
@@ -134,6 +141,9 @@ class ChecksumError(RAMKernelError):
                                                                 self.checksum)
 
 class CommandResponseError(RAMKernelError):
+    """
+    An exception representing an error response from the RAM kernel.
+    """
     def __init__(self, command, ackcode, payload):
         super(CommandResponseError, self).__init__()
         #: Command code that generated this error.
@@ -157,7 +167,15 @@ def calculate_checksum(buf):
     return checksum
 
 class RAMKernelProtocol(object):
+    """
+    Implementation of the host side of the i.MX RAM kernel protocol.  It is used
+    for BSP-specific handling of device flash (MMC, NAND, NOR, etc.) and programmable fuses.
+    """
     def __init__(self, channel):
+        """
+        Create a RAM kernel protocol handler for communications ``channel`` (an instance
+        of a :class:`~.ATKChannelI` derivative).
+        """
         self.channel = channel
 
     def _read_response(self, read_payload = True):
