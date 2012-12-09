@@ -121,3 +121,105 @@ class RAMKernelTests(unittest.TestCase):
 
         # The callback should never have been called.
         self.assertEqual(len(callback_data), 0)
+
+    def test_flash_dump(self):
+        """
+        Ensure flash_dump in normal operation works correctly - multiple FLASH_PARTLY responses,
+        checksum validation, etc.
+        """
+        data = "testing random \x00 data 1 2 \x03"
+        cksum = ramkernel.calculate_checksum(data)
+        self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data), data)
+        # NOTE: the RKL main() never sends ACK_SUCCESS for CMD_FLASH_DUMP - only
+        # a sequence of ACK_FLASH_PARTLY responses.
+
+        # Don't care about the address or requested size, we're mocking it
+        dump_data = self.rkl.flash_dump(0x0000, len(data))
+
+        self.assertEqual(data, dump_data)
+
+        test_data =  (
+            "testing random \x00 data 1 2 \x03",
+            "cold wind to valhalla",
+            "\xff" * 1024,
+            "\x00" * 2048
+        )
+        # Multipart
+        for data_chunk in test_data:
+             cksum = ramkernel.calculate_checksum(data_chunk)
+             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data_chunk), data_chunk)
+
+        total_test_data = "".join(test_data)
+        # Don't care about the address.
+        dump_data = self.rkl.flash_dump(0x0000, len(total_test_data))
+
+        self.assertEqual("".join(test_data), dump_data)
+
+    def test_flash_dump_checksum_error(self):
+        """
+        Ensure flash_dump handles checksum errors correctly, by raising ramkernel.ChecksumError.
+        flash_dump should set ChecksumError internal values correctly.
+        """
+        data = "testing random \x00 data 1 2 \x03"
+        real_cksum = ramkernel.calculate_checksum(data)
+        fake_cksum = (real_cksum + 1) & 0xFFFF
+        self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, fake_cksum, len(data), data)
+
+        with self.assertRaises(ramkernel.ChecksumError) as cm:
+            # Don't care about the address or requested size, we're mocking it
+            self.rkl.flash_dump(0x0000, len(data))
+        self.assertEqual(cm.exception.expected_checksum, fake_cksum)
+        self.assertEqual(cm.exception.checksum, real_cksum)
+
+        ## Test with initial successes, then a failed checksum
+        test_data =  (
+            "testing random \x00 data 1 2 \x03",
+            "cold wind to valhalla",
+            "\xff" * 1024,
+            "\x00" * 2048
+        )
+        for data_chunk in test_data:
+            # Calculate the real checksum for these chunks
+             cksum = ramkernel.calculate_checksum(data_chunk)
+             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data_chunk), data_chunk)
+        # Now for the bad checksum...
+        data = "testing random \x00 data 1 2 \x03"
+        real_cksum = ramkernel.calculate_checksum(data)
+        fake_cksum = (real_cksum + 1) & 0xFFFF
+        self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, fake_cksum, len(data), data)
+        self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
+
+        total_data_length = len("".join(test_data + (data,)))
+        with self.assertRaises(ramkernel.ChecksumError) as cm:
+            self.rkl.flash_dump(0x0000, total_data_length)
+
+        self.assertEqual(cm.exception.expected_checksum, fake_cksum)
+        self.assertEqual(cm.exception.checksum, real_cksum)
+
+    def test_flash_dump_partial_error(self):
+        """
+        Ensure flash_dump handles partial read errors correctly.
+        """
+        data = "testing random \x00 data 1 2 \x03"
+        cksum = ramkernel.calculate_checksum(data)
+        self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data), data)
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_READ, 0, 0)
+
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            # We ask for more size than the first response gives, so we try to read again
+            # and encounter the FLASH_ERROR_READ.
+            self.rkl.flash_dump(0x0000, len(data) * 2)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_READ)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_DUMP)
+
+    def test_flash_dump_initial_error(self):
+        """
+        Ensure flash_dump handles initial read error correctly.
+        """
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_OVER_ADDR, 0, 0)
+
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            # Don't care about the address or requested size, we're mocking it
+            self.rkl.flash_dump(0x0000, 0x400)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_OVER_ADDR)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_DUMP)
