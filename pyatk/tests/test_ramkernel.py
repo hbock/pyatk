@@ -76,5 +76,48 @@ class RAMKernelTests(unittest.TestCase):
             self.assertEqual(cb_block_idx, index)
             self.assertEqual(cb_block_sz, block_size + index)
 
+    def test_erase_partial_error(self):
+        """ Test flash_erase error handling - partial erase """
+        callback_data = []
+        block_size = 0x20000
 
+        # queue up 25 good partial responses followed by an error.
+        # The callback should be called for each of the 25 good responses.
+        for block_index in xrange(25):
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_ERASE,
+                                            block_index,
+                                            block_size + block_index)
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_PART_ERASE, 0, 0)
 
+        # Close over callback_data to make sure it is called correctly.
+        def erase_cb(block_idx, block_sz):
+            callback_data.append((block_idx, block_sz))
+
+        # Ensure an exception is raised
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            self.rkl.flash_erase(0x0, 1, erase_callback=erase_cb)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_PART_ERASE)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_ERASE)
+
+        self.assertEqual(len(callback_data), 25)
+        for index, (cb_block_idx, cb_block_sz) in zip(xrange(25), callback_data):
+            self.assertEqual(cb_block_idx, index)
+            self.assertEqual(cb_block_sz, block_size + index)
+
+    def test_erase_initial_error(self):
+        """ Test flash_erase error handling - no blocks erased """
+        callback_data = []
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_OVER_ADDR, 0, 0)
+
+        # Close over callback_data to make sure it is called correctly.
+        def erase_cb(block_idx, block_sz):
+            callback_data.append((block_idx, block_sz))
+
+        # Ensure an exception is raised
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            self.rkl.flash_erase(0x0, 1, erase_callback=erase_cb)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_OVER_ADDR)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_ERASE)
+
+        # The callback should never have been called.
+        self.assertEqual(len(callback_data), 0)
