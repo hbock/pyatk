@@ -93,6 +93,7 @@ class ToolkitApplication(object):
 
         except boot.CommandResponseError, exc:
             print "Command response error: %s" % exc
+            sys.exit(1)
 
     def load_mem_initializer(self):
         if self.options.init_file:
@@ -140,6 +141,26 @@ class ToolkitApplication(object):
         print "read flash first page:"
         start_address = 0x0000
         flash_page = self.ramkernel.flash_dump(start_address, 1024)
+        print_hex_dump(flash_page, start_address)
+
+        def erase_cb(block_index, block_size):
+            print("Erased block %d (size %d bytes)." % (block_index, block_size))
+
+        print("Erasing first two pages.")
+        size = 2048
+        self.ramkernel.flash_erase(start_address, size, erase_callback = erase_cb)
+        print("Dump after erase...")
+        flash_page = self.ramkernel.flash_dump(start_address, size)
+        print_hex_dump(flash_page, start_address)
+
+        def program_cb(length, total_bytes_written):
+            print("Programmed %d bytes (%d total)" % (length, total_bytes_written))
+
+        print("Test flashing DEADBEEF to first page...")
+        self.ramkernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
+                                     program_callback = program_cb)
+        print("Dump after program...")
+        flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
         print "resetting CPU"
