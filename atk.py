@@ -25,6 +25,7 @@
 Portable Python ATK implementation
 """
 
+import re
 import os
 import sys
 import time
@@ -35,6 +36,28 @@ from pyatk import boot
 from pyatk import ramkernel
 
 DEFAULT_RAM_KERNEL_ADDRESS = 0x80004000
+
+def print_hex_dump(data, start_address, bytes_per_row = 16):
+    """ Adjustable string hex dumper. """
+    for address in xrange(0, len(data), bytes_per_row):
+        sys.stdout.write("%08x : " % (start_address + address))
+
+        row_data = data[address:address + bytes_per_row]
+
+        for column, byte in enumerate(row_data):
+            sys.stdout.write("%02x " % ord(byte))
+
+        # If len(row_data) < bytes_per_row, pad with spaces to align
+        # the printable view.
+        sys.stdout.write(" " * (3 * (bytes_per_row - len(row_data))))
+        sys.stdout.write("| ")
+
+        # Replace unprintable ASCII with '.'
+        printable_row_data = re.sub("[^\x20-\x7e]", ".", row_data)
+        for column, byte in enumerate(printable_row_data):
+            sys.stdout.write("%c" % byte)
+
+        sys.stdout.write("\n")
 
 class ToolkitError(Exception):
     def __init__(self, msg):
@@ -115,14 +138,10 @@ class ToolkitApplication(object):
         print "ram kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
 
         print "read flash first page:"
-        flash_page = self.ramkernel.flash_dump(0x0000, 1024)
-        for index, byte in enumerate(flash_page):
-            sys.stderr.write("%02x " % ord(byte))
-            if index % 8 == 7:
-                sys.stderr.write(" ")
-            if index % 16 == 15:
-                sys.stderr.write("\n")
-        
+        start_address = 0x0000
+        flash_page = self.ramkernel.flash_dump(start_address, 1024)
+        print_hex_dump(flash_page, start_address)
+
         print "resetting CPU"
         self.ramkernel.reset()
         time.sleep(1)
