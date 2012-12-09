@@ -237,3 +237,60 @@ class RAMKernelTests(unittest.TestCase):
                           AVeryLargeObject(ramkernel.FLASH_PROGRAM_MAX_WRITE_SIZE + 1))
         self.assertRaises(ValueError, self.rkl.flash_program, 0, "")
         self.assertRaises(ValueError, self.rkl.flash_program, 0, "asdf", file_format = -1)
+
+    def test_flash_program(self):
+        data = "the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
+        partial_data_len = len(data)/2
+
+        def queue_responses():
+            self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, len(data) - partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
+
+        queue_responses()
+        self.rkl.flash_program(0x0000, data)
+
+        # Now again, with a callback defined.
+        callback_data = []
+        def prog_cb(length, total_length):
+            callback_data.append((length, total_length))
+
+        queue_responses()
+        self.rkl.flash_program(0x0000, data, program_callback = prog_cb)
+
+        self.assertEqual(len(callback_data), 2)
+        self.assertEqual(callback_data[0][0], partial_data_len)
+        self.assertEqual(callback_data[0][1], partial_data_len)
+        self.assertEqual(callback_data[1][0], len(data) - partial_data_len)
+        self.assertEqual(callback_data[1][1], len(data))
+
+    def test_flash_program_initial_error(self):
+        """ Test flash_dump with an initial error raises CommandResponseError """
+        self.channel.queue_rkl_response(ramkernel.FLASH_FAILED, 0, 0)
+
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            # Don't care about the address or requested size, we're mocking it
+            self.rkl.flash_program(0x0000, "asdf")
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_FAILED)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_PROGRAM)
+
+    def test_flash_program_partial_error(self):
+        """ Ensure flash_program handles partial program errors correctly. """
+        data = "testing random \x00 data 1 2 \x03"
+        self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_PROG, 0, 0)
+
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            self.rkl.flash_program(0x0000, data)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_PROG)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_PROGRAM)
+
+        self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
+        self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, len(data) - 1)
+        self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_PROG, 0, 0)
+
+        with self.assertRaises(ramkernel.CommandResponseError) as cm:
+            self.rkl.flash_program(0x0000, data)
+        self.assertEqual(cm.exception.ack, ramkernel.FLASH_ERROR_PROG)
+        self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_PROGRAM)
