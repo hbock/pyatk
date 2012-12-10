@@ -138,13 +138,65 @@ class ToolkitApplication(object):
         print "Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel)
         print "RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
 
-        if self.options.rkl_flash_test:
-            self.ram_kernel_flash_test()
+        try:
+            if self.options.rkl_flash_test:
+                self.ram_kernel_flash_test()
+            elif self.options.rkl_flash_file:
+                self.ram_kernel_flash_file(self.options.rkl_flash_file, self.options.rkl_flash_start_address)
+            elif self.options.rkl_flash_dump:
+                self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
 
-        print("End of RAM kernel test. Resetting CPU.")
-        self.ramkernel.reset()
-        time.sleep(1)
-        print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
+        finally:
+            print("End of RAM kernel test. Resetting CPU.")
+            self.ramkernel.reset()
+            time.sleep(1)
+            print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
+
+    def ram_kernel_dump(self, start_address, count, page_size = 2048):
+        print("Dumping flash @ 0x%08x, count %d" % (start_address, count))
+        print("Also dumping to dump.bin...")
+        with open("dump.bin", "wb") as dump_fp:
+            for address in xrange(start_address, start_address + count, page_size):
+                data = self.ramkernel.flash_dump(address, page_size)
+                print_hex_dump(data, address)
+                dump_fp.write(data)
+
+    def ram_kernel_flash_file(self, path, start_address):
+        ## FIXME this doesn't quite work yet... at least, I haven't gotten
+        ## it to boot on any BSP yet.  Dumping flash to file (--flash-dump)
+        ## and comparing against "path" show the files are binary identical.
+        ## It must be something to do with either the image I'm testing,
+        ## or not setting up the BBT.
+        if start_address is None:
+            raise ToolkitError("Flash start address not specified!")
+
+        print("Programming %r to 0x%08x" % (path, start_address))
+        block_size = 0x20000
+
+        data_size = os.stat(path).st_size
+        def prog_cb(block, length):
+            print("Programmed block %d, length %d" % (block, length))
+        def erase_cb(block, length):
+            print("Erased block %d, length %d" % (block, length))
+        def verify_cb(block, length):
+            print("Verified block %d, length %d" % (block, length))
+
+        print("Erasing address %d, %d bytes" % (start_address, data_size))
+        self.ramkernel.flash_erase(start_address, data_size, erase_callback=erase_cb)
+
+        with open(path, "rb") as file_fp:
+            read_size = block_size
+            current_address = start_address
+            chunk = file_fp.read(read_size)
+
+            while current_address < (start_address + data_size):
+                print("Programming %d bytes @ 0x%08x." % (len(chunk), current_address))
+                self.ramkernel.flash_program(current_address, chunk,
+                                             read_back_verify = True,
+                                             program_callback = prog_cb,
+                                             verify_callback  = verify_cb)
+                current_address += len(chunk)
+                chunk = file_fp.read(read_size)
 
     def ram_kernel_flash_test(self):
         print("Running RKL flash test.")
@@ -157,7 +209,7 @@ class ToolkitApplication(object):
             print("Erased block %d (size %d bytes)." % (block_index, block_size))
 
         size = 4096 * 4
-        print("Erasing first %d bytes.", size)
+        print("Erasing first %d bytes." % size)
         self.ramkernel.flash_erase(start_address, size, erase_callback = erase_cb)
         print("Dump after erase...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
@@ -195,16 +247,6 @@ class ToolkitApplication(object):
             self.sbp.complete_boot()
             print
             print "Application write/execute OK!"
-
-        if self.options.read_forever:
-            print "Continuously reading from channel. Press Ctrl-C to exit."
-            print
-            start_time = time.time()
-            while True:
-                data = self.channel.read(10)
-                if data != "":
-                    sys.stdout.write(data)
-                    sys.stdout.flush()
 
 def read_initialization_file(filename):
     with open(filename, "r") as initfp:
@@ -248,6 +290,17 @@ def main():
                        dest = "rkl_flash_test",
                        help = "Test the flash part using the RAM kernel.",
                        default = False)
+    rkgroup.add_option("--flash-dump", "-d", action = "store", type = "int",
+                       dest = "rkl_flash_dump", metavar = "COUNT",
+                       help = "Dump COUNT bytes of flash starting at --flash-address.")
+    rkgroup.add_option("--flash-file", action = "store",
+                       dest = "rkl_flash_file",
+                       metavar = "FILENAME",
+                       help = "Program this file to device flash memory.")
+    rkgroup.add_option("--flash-address", action = "store", type = "int",
+                       dest = "rkl_flash_start_address",
+                       metavar = "ADDRESS",
+                       help = "Starting writing to device flash memory at ADDRESS.")
 
     comgroup = OptionGroup(parser, "Communications")
     comgroup.add_option("--serialport", "-s", action = "store",
@@ -274,6 +327,16 @@ def main():
     atkprog = ToolkitApplication(serial_channel, options)
     try:
         atkprog.run()
+
+        if options.read_forever:
+            print "Continuously reading from channel. Press Ctrl-C to exit."
+            print
+            start_time = time.time()
+            while True:
+                data = serial_channel.read(10)
+                if data != "":
+                    sys.stdout.write(data)
+                    sys.stdout.flush()
 
     except KeyboardInterrupt:
         print "User exit."
