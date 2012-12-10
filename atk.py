@@ -156,19 +156,24 @@ class ToolkitApplication(object):
         def erase_cb(block_index, block_size):
             print("Erased block %d (size %d bytes)." % (block_index, block_size))
 
-        print("Erasing first two pages.")
-        size = 2048
+        size = 4096 * 4
+        print("Erasing first %d bytes.", size)
         self.ramkernel.flash_erase(start_address, size, erase_callback = erase_cb)
         print("Dump after erase...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
-        def program_cb(length, total_bytes_written):
-            print("Programmed %d bytes (%d total)" % (length, total_bytes_written))
+        def program_cb(block, write_length):
+            print("Programmed block %d, length %d (%d total)" % (block, write_length))
+        def verify_cb(block, verify_length):
+            print("Verified block %d, length %d" % (block, verify_length))
 
         print("Test flashing DEADBEEF to first page...")
         self.ramkernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
-                                     program_callback = program_cb)
+                                     read_back_verify = True,
+                                     program_callback = program_cb,
+                                     verify_callback  = verify_cb)
+
         print("Dump after program...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)

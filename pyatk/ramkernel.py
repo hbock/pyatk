@@ -389,7 +389,7 @@ class RAMKernelProtocol(object):
 
         while ACK_FLASH_PARTLY == ack:
             if program_callback:
-                program_callback(length, total_length)
+                program_callback(block, length)
 
             ack, block, length = self._read_response()
             total_length += length

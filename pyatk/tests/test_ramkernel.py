@@ -245,7 +245,7 @@ class RAMKernelTests(unittest.TestCase):
         def queue_responses():
             self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, partial_data_len)
-            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, len(data) - partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 1, len(data) - partial_data_len)
             self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
 
         queue_responses()
@@ -253,17 +253,51 @@ class RAMKernelTests(unittest.TestCase):
 
         # Now again, with a callback defined.
         callback_data = []
-        def prog_cb(length, total_length):
-            callback_data.append((length, total_length))
+        def prog_cb(block, length_written):
+            callback_data.append((block, length_written))
 
         queue_responses()
         self.rkl.flash_program(0x0000, data, program_callback = prog_cb)
 
         self.assertEqual(len(callback_data), 2)
-        self.assertEqual(callback_data[0][0], partial_data_len)
+        self.assertEqual(callback_data[0][0], 0)
         self.assertEqual(callback_data[0][1], partial_data_len)
-        self.assertEqual(callback_data[1][0], len(data) - partial_data_len)
-        self.assertEqual(callback_data[1][1], len(data))
+        self.assertEqual(callback_data[1][0], 1)
+        self.assertEqual(callback_data[1][1], len(data) - partial_data_len)
+
+    def test_flash_program_verify(self):
+        data = "the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
+        partial_data_len = len(data)/2
+
+        def queue_responses():
+            self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 0, partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, 1, len(data) - partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_VERIFY, 0, partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_FLASH_VERIFY, 1, len(data) - partial_data_len)
+            self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
+
+        queue_responses()
+        self.rkl.flash_program(0x0000, data, read_back_verify=True)
+
+        # Now again, with a callback defined.
+        prog_cb_data = []
+        verify_cb_data = []
+        def prog_cb(block, length_written):
+            prog_cb_data.append((block, length_written))
+        def verify_cb(block, length_verified):
+            verify_cb_data.append((block, length_verified))
+
+        queue_responses()
+        self.rkl.flash_program(0x0000, data, read_back_verify = True,
+                               program_callback = prog_cb, verify_callback = verify_cb)
+
+        for cb_data in prog_cb_data, verify_cb_data:
+            self.assertEqual(len(cb_data), 2)
+            self.assertEqual(cb_data[0][0], 0)
+            self.assertEqual(cb_data[0][1], partial_data_len)
+            self.assertEqual(cb_data[1][0], 1)
+            self.assertEqual(cb_data[1][1], len(data) - partial_data_len)
 
     def test_flash_program_initial_error(self):
         """ Test flash_dump with an initial error raises CommandResponseError """
