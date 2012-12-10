@@ -2,13 +2,13 @@
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
-# modification, are permitted provided that the following conditions are met: 
+# modification, are permitted provided that the following conditions are met:
 #
 # 1. Redistributions of source code must retain the above copyright notice, this
-#    list of conditions and the following disclaimer. 
+#    list of conditions and the following disclaimer.
 # 2. Redistributions in binary form must reproduce the above copyright notice,
 #    this list of conditions and the following disclaimer in the documentation
-#    and/or other materials provided with the distribution. 
+#    and/or other materials provided with the distribution.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 # ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -321,7 +321,8 @@ class RAMKernelProtocol(object):
     def flash_program(self, start_address, data,
                       file_format = FLASH_FILE_FORMAT_NORMAL,
                       read_back_verify = False,
-                      program_callback = None):
+                      program_callback = None,
+                      verify_callback = None):
         """
         Program the flash device with ``data`` starting at ``start_address``.
         The maximum size of ``data`` is :const:`FLASH_PROGRAM_MAX_WRITE_SIZE`;
@@ -331,10 +332,14 @@ class RAMKernelProtocol(object):
         is read back for verification.
 
         If ``program_callback`` is specified, it is called for each page successfully
-        written to flash or verified.  ``program_callback`` must take two parameters
-        ``(write_length, total_written)``, where ``write_length`` is the length
-        of the successful partial write operation and ``total_written`` is the total
-        number of bytes written as of the callback.
+        written to flash.  ``program_callback`` must take two parameters
+        ``(block, write_length)``, where ``block`` is the block on which the write
+        operation is performed (*not* the page!) and ``write_length`` is the length
+        of the successful partial write operation.
+
+        If ``verify_callback`` is specified, it is called for each page successfully
+        verified by the RAM kernel.  ``verify_callback`` must take two parameters
+        ``(block, verify_length)``, similar to the parameters to ``program_callback`` above.
         """
         if start_address < 0:
             raise ValueError("Invalid start address %r" % start_address)
@@ -356,9 +361,7 @@ class RAMKernelProtocol(object):
 
         flags = file_format
         if read_back_verify:
-            # flags |= FLASH_PROGRAM_PARAM1_VERIFY
-            # TODO implement me!
-            raise NotImplementedError("read_back_verify not yet implemented.")
+            flags |= FLASH_PROGRAM_PARAM1_VERIFY
 
         # The initial CMD_FLASH_PROGRAM tells the RAM kernel to prepare for len(data)
         # bytes to be sent.  It ACKs this initial request before the host sends
@@ -381,22 +384,34 @@ class RAMKernelProtocol(object):
 
         # Command responses send back the length of the partial write, but do not
         # include a payload.
-        ack, checksum, length = self._read_response()
-        if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
-            raise CommandResponseError(flash_command, ack, length)
-
+        ack, block, length = self._read_response()
         total_length = length
+
         while ACK_FLASH_PARTLY == ack:
             if program_callback:
                 program_callback(length, total_length)
 
-            ack, checksum, length = self._read_response()
-            if ack not in (ACK_SUCCESS, ACK_FLASH_PARTLY, ACK_FLASH_VERIFY):
-                raise CommandResponseError(flash_command, ack, length)
-
+            ack, block, length = self._read_response()
             total_length += length
 
-        # TODO: read back verify messages
+        # If we are instructing the RAM kernel to verify, we expect
+        # the kernel to follow the ACK_FLASH_PARTLY stream with
+        # ACK_FLASH_VERIFY.  Each ACK_FLASH_VERIFY contains the
+        # flash block number and the length of the page verified.
+        if read_back_verify:
+            if ACK_FLASH_VERIFY != ack:
+                raise CommandResponseError(flash_command, ack, length)
+
+            while ACK_FLASH_VERIFY == ack:
+                if verify_callback:
+                    verify_callback(block, length)
+
+                ack, block, length = self._read_response()
+
+        # Whether or not read_back_verify is set, we expect the program
+        # operation to terminate in ACK_SUCCESS.
+        if ACK_SUCCESS != ack:
+            raise CommandResponseError(flash_command, ack, length)
 
     def reset(self):
         """
