@@ -32,6 +32,7 @@ import time
 from optparse import OptionParser, OptionGroup
 
 from pyatk.channel.uart import UARTChannel
+from pyatk.channel.usbdev import USBChannel
 from pyatk import boot
 from pyatk import ramkernel
 
@@ -68,17 +69,37 @@ class ToolkitError(Exception):
         return self.msg
 
 class ToolkitApplication(object):
-    def __init__(self, chan, options):
-        self.channel = chan
+    def __init__(self, options):
+
+        if options.usb_vid_pid:
+            try:
+                if ":" in options.usb_vid_pid:
+                    vid_str, pid_str = options.usb_vid_pid.partition(":")
+                    vid = int(vid_str, 0)
+                    pid = int(pid_str, 0)
+                else:
+                    vid = int(options.usb_vid_pid, 0)
+                    pid = None
+
+            except ValueError:
+                raise ToolkitError("Could not convert USB VID/PID %r to integer." % options.usb_vid_pid)
+
+            else:
+                self.channel = USBChannel(idVendor = vid, idProduct = pid)
+
+        elif options.serialport:
+            self.channel = UARTChannel(options.serialport)
+
         self.options = options
 
-        self.sbp = boot.SerialBootProtocol(chan)
-        self.ramkernel = ramkernel.RAMKernelProtocol(chan)
+        self.sbp = boot.SerialBootProtocol(self.channel)
+        self.ramkernel = ramkernel.RAMKernelProtocol(self.channel)
         self.mem_init_data = []
 
     def run(self):
         self.load_mem_initializer()
         try:
+            self.channel.open()
             status = self.sbp.get_status()
             print "Boot status:", boot.get_status_string(status)
             
@@ -91,9 +112,22 @@ class ToolkitApplication(object):
             elif self.options.application_file is not None:
                 self.run_application(self.options.application_file, self.options.application_address)
 
+            if self.options.read_forever:
+                print "Continuously reading from channel. Press Ctrl-C to exit."
+                print
+                while True:
+                    data = self.channel.read(10)
+                    if data != "":
+                        sys.stdout.write(data)
+                        sys.stdout.flush()
+
         except boot.CommandResponseError, exc:
             print "Command response error: %s" % exc
             sys.exit(1)
+
+        finally:
+            if self.channel:
+                self.channel.close()
 
     def load_mem_initializer(self):
         if self.options.init_file:
@@ -125,11 +159,18 @@ class ToolkitApplication(object):
         rk_file = self.options.ram_kernel_file
         rk_addr = self.options.ram_kernel_address
 
-        print "loading ram kernel %r" % rk_file 
+        print "loading ram kernel %r" % rk_file
         self.run_application(rk_file, rk_addr)
 
-        print "waiting after ram kernel start..."
-        time.sleep(1)
+        print "waiting after ram kernel start... (ctrl+C to shortcut)"
+        try:
+            time.sleep(3)
+        except KeyboardInterrupt:
+            pass
+
+        #sys.exit(1)
+        #self.channel.reconnect()
+        self.channel.open()
 
         print "ram kernel initialize flash"
         self.ramkernel.flash_initial()
@@ -306,6 +347,9 @@ def main():
     comgroup.add_option("--serialport", "-s", action = "store",
                         dest = "serialport", metavar = "DEVICE",
                         help = "Serial port device name.")
+    comgroup.add_option("--usb", "-u", action = "store",
+                        dest = "usb_vid_pid", metavar = "VID[:PID]",
+                        help = "USB vendor ID/product ID")
     comgroup.add_option("--read-forever", "-r", action = "store_true",
                         dest = "read_forever", default = False,
                         help  = ("Read continuously from communication channel after "
@@ -316,27 +360,17 @@ def main():
     
     options, args = parser.parse_args()
 
-    if not options.serialport:
-        parser.error("Please select a serial port.")
+    if not (options.serialport or options.usb_vid_pid):
+        parser.error("Please select a serial port/USB device.")
+    if options.serialport and options.usb_vid_pid:
+        parser.error("Cannot select both a serial port and a USB device!")
 
     if options.application_file and not options.application_address:
         parser.error("Application file specified without address.")
 
-    serial_channel = UARTChannel(options.serialport)
-    serial_channel.open()
-    atkprog = ToolkitApplication(serial_channel, options)
+    atkprog = ToolkitApplication(options)
     try:
         atkprog.run()
-
-        if options.read_forever:
-            print "Continuously reading from channel. Press Ctrl-C to exit."
-            print
-            start_time = time.time()
-            while True:
-                data = serial_channel.read(10)
-                if data != "":
-                    sys.stdout.write(data)
-                    sys.stdout.flush()
 
     except KeyboardInterrupt:
         print "User exit."
@@ -347,9 +381,6 @@ def main():
 
     except ToolkitError, exc:
         parser.error(str(exc))
-
-    finally:
-        serial_channel.close()
 
 if __name__ == "__main__":
     main()
