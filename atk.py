@@ -35,8 +35,7 @@ from pyatk.channel.uart import UARTChannel
 from pyatk.channel.usbdev import USBChannel
 from pyatk import boot
 from pyatk import ramkernel
-
-DEFAULT_RAM_KERNEL_ADDRESS = 0x80004000
+from pyatk import bspinfo
 
 def print_hex_dump(data, start_address, bytes_per_row = 16):
     """ Adjustable string hex dumper. """
@@ -70,6 +69,8 @@ class ToolkitError(Exception):
 
 class ToolkitApplication(object):
     def __init__(self, options):
+        # Some care is needed for USB enumeration timing.
+        self._usb = (options.usb_vid_pid is not None)
 
         if options.usb_vid_pid:
             try:
@@ -92,11 +93,40 @@ class ToolkitApplication(object):
 
         self.options = options
 
+        self.bsp_info = None
         self.sbp = boot.SerialBootProtocol(self.channel)
         self.ramkernel = ramkernel.RAMKernelProtocol(self.channel)
         self.mem_init_data = []
 
+    def channel_reinit(self):
+        """ Close and re-open the ATK channel. """
+        # This only applies to USB.  When the USB interface
+        # is reset (either via loading an application
+        # or resetting the CPU back into SBP mode), the interface
+        # takes some time to reset and be recognized by the host
+        # OS.  3 seconds empirically works for me on Linux with libusb.
+        #
+        # It would be nice if we could wait for OS hotplug events,
+        # but that's not possible with libusb (maybe libusbx?)
+        # and it's not really worth the effort IMHO.
+        if self._usb:
+            self.channel.close()
+            time.sleep(3)
+            self.channel.open()
+
     def run(self):
+        bsp_table_path = os.path.abspath("bspinfo.csv")
+        try:
+            bsp_table = bspinfo.load_board_support_table(bsp_table_path)
+
+        except IOError, e:
+            raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
+
+        self.bsp_info = bsp_table[self.options.bsp_name]
+        print("Selected BSP %r." % self.options.bsp_name)
+        print("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
+                                                 self.bsp_info.memory_bottom_address))
+
         self.load_mem_initializer()
         try:
             self.channel.open()
@@ -158,26 +188,34 @@ class ToolkitApplication(object):
     def run_ram_kernel(self):
         rk_file = self.options.ram_kernel_file
         rk_addr = self.options.ram_kernel_address
+        if rk_addr == -1:
+            rk_addr = self.bsp_info.ram_kernel_origin
+            print("RAM kernel origin not specified; using BSP value 0x%08X" % rk_addr)
+        else:
+            print("Using user-specified RAM kernel origin: 0x%08X" % rk_addr)
 
-        print "loading ram kernel %r" % rk_file
-        self.run_application(rk_file, rk_addr)
+        def load_cb(current, total):
+            bar_len = 50
+            bar_on = int(float(current) / total * bar_len)
+            bar_off = bar_len - bar_on
+            sys.stdout.write("[%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
+            sys.stdout.flush()
 
-        print "waiting after ram kernel start... (ctrl+C to shortcut)"
-        try:
-            time.sleep(3)
-        except KeyboardInterrupt:
-            pass
+        # Load the RK image in one go - it's usually << 100 Kb, memory
+        # is cheap, right? :)
+        with open(rk_file, "rb") as rk_image_fp:
+            rk_image_data = rk_image_fp.read()
+            self.ramkernel.run_image(rk_image_data, self.bsp_info, load_cb)
 
-        #sys.exit(1)
-        #self.channel.reconnect()
-        self.channel.open()
+        # Re-open channel
+        self.channel_reinit()
 
-        print "ram kernel initialize flash"
+        print("RAM kernel initialize flash.")
         self.ramkernel.flash_initial()
-        print "ram kernel getver:"
+        print("RAM kernel getver():")
         imxtype, flashmodel = self.ramkernel.getver()
-        print "Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel)
-        print "RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024)
+        print("Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel))
+        print("RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024))
 
         try:
             if self.options.rkl_flash_test:
@@ -188,9 +226,10 @@ class ToolkitApplication(object):
                 self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
 
         finally:
-            print("End of RAM kernel test. Resetting CPU.")
+            print("\nEnd of RAM kernel test. Resetting CPU...")
             self.ramkernel.reset()
-            time.sleep(1)
+            self.channel_reinit()
+
             print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
 
     def ram_kernel_dump(self, start_address, count, page_size = 2048):
@@ -257,7 +296,7 @@ class ToolkitApplication(object):
         print_hex_dump(flash_page, start_address)
 
         def program_cb(block, write_length):
-            print("Programmed block %d, length %d (%d total)" % (block, write_length))
+            print("Programmed block %d, length %d" % (block, write_length))
         def verify_cb(block, verify_length):
             print("Verified block %d, length %d" % (block, verify_length))
 
@@ -308,6 +347,9 @@ def read_initialization_file(filename):
 
 def main():
     parser = OptionParser("%prog -s DEVICE [-k ramkernel] [-i init.txt] [application]")
+    parser.add_option("--bsp", "-b", action = "store",
+                      dest = "bsp_name", metavar = "PLATFORM",
+                      help = "Platform BSP name (e.g., mx25)")
     parser.add_option("--initialization-file", "-i", action = "store",
                       dest = "init_file", metavar = "FILE",
                       help = "Memory initialization file.")
@@ -324,9 +366,9 @@ def main():
                        help = "RAM kernel helper application binary.")
     rkgroup.add_option("--ram-kernel-address", action = "store",
                        dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
-                       default = DEFAULT_RAM_KERNEL_ADDRESS,
-                       help = ("RAM kernel helper application base address "
-                               "(default DRAM 0x%08X)." % DEFAULT_RAM_KERNEL_ADDRESS))
+                       default = -1,
+                       help = ("RAM kernel helper application origin address"
+                               "(default to BSP definition)."))
     rkgroup.add_option("--flash-test", "-t", action = "store_true",
                        dest = "rkl_flash_test",
                        help = "Test the flash part using the RAM kernel.",
@@ -360,6 +402,8 @@ def main():
     
     options, args = parser.parse_args()
 
+    if not options.bsp_name:
+        parser.error("Please select a BSP name.")
     if not (options.serialport or options.usb_vid_pid):
         parser.error("Please select a serial port/USB device.")
     if options.serialport and options.usb_vid_pid:

@@ -25,9 +25,13 @@
 Freescale i.MX ATK RAM kernel protocol implementation
 """
 import struct
+from StringIO import StringIO
+
+from pyatk import boot
 
 HEADER_MAGIC = 0x0606
 
+CMD_FLASH = 0x0000
 ## RKL NAND flash commands
 CMD_FLASH_INITIAL      = 0x0001
 CMD_FLASH_ERASE        = 0x0002
@@ -49,18 +53,21 @@ FLASH_PROGRAM_PARAM1_GO_ON  = 0x00000100
 # will fail.
 FLASH_PROGRAM_MAX_WRITE_SIZE = (2 * 1024 * 1024)
 
+CMD_FUSE = 0x0100
 ## RKL eFUSE commands
 CMD_FUSE_READ     = 0x0101
 CMD_FUSE_SENSE    = 0x0102
 CMD_FUSE_OVERRIDE = 0x0103
 CMD_FUSE_PROGRAM  = 0x0104
 
+CMD_COMMON = 0x0200
 ## RKL common commands
 CMD_RESET    = 0x0201
 CMD_DOWNLOAD = 0x0202
 CMD_EXECUTE  = 0x0203
 CMD_GETVER   = 0x0204
 
+CMD_EXTENDED = 0x0300
 ## Extended commands
 CMD_COM2USB  = 0x0301
 CMD_SWAP_BI  = 0x0302
@@ -178,6 +185,12 @@ class RAMKernelProtocol(object):
         """
         self.channel = channel
 
+        ## Internal state management
+        # True if CMD_FLASH_INITIAL has been run
+        self._flash_init = False
+        # True if the RAM kernel itself has been loaded.x
+        self._kernel_init = False
+
     def _read_response(self):
         """
         Read the device response and return
@@ -192,6 +205,13 @@ class RAMKernelProtocol(object):
                       param1  = 0x00000000,
                       param2  = 0x00000000,
                       wait_for_response = True):
+        # Ensure we've initialized the kernel properly.
+        if not self._kernel_init:
+            raise RAMKernelError("Cannot send RAM kernel command without first loading kernel!")
+        if (CMD_FLASH == (command & 0xFF00)) and (CMD_FLASH_INITIAL != command):
+            if not self._flash_init:
+                raise RAMKernelError("Cannot use flash-layer command without first using flash_initial()!")
+
         rawcmd = struct.pack(">HHIII", HEADER_MAGIC, command, address, param1, param2)
         self.channel.write(rawcmd)
 
@@ -201,6 +221,45 @@ class RAMKernelProtocol(object):
                 raise CommandResponseError(command, ack, length)
 
             return ack, checksum, length
+
+    def run_image(self, image_data, bsp_info, load_cb = None):
+        """
+        Run the RAM kernel binary in ``image_data`` using :class:`BoardSupportInfo`
+        instance ``bsp_info`` to determine memory locations and the image origin.
+
+        If ``load_cb`` is specified, call this incrementally
+        as the RAM kernel is transferred to memory.
+
+        This method **must** be called to start the RAM kernel.
+        """
+        if self._kernel_init:
+            raise ValueError("RAM kernel already loaded and initialized.")
+
+        # The RAM kernel image must be loaded via the iMX SBP.
+        sbp = boot.SerialBootProtocol(self.channel)
+
+        # Make the kernel image streamable
+        image_fp = StringIO(image_data)
+
+        # In order for the RAM kernel to operate using the correct channel,
+        # you must write the RAM kernel channel type to the platform
+        # base memory address.
+        #
+        # The options on unmodified Freescale kernels are UART (0, default)
+        # and USB (1).
+        sbp.write_memory(bsp_info.base_memory_address,
+                         boot.DATA_SIZE_WORD,
+                         self.channel.chantype)
+        # Load the kernel.
+        sbp.write_file(boot.FILE_TYPE_APPLICATION,
+                       bsp_info.ram_kernel_origin, len(image_data),
+                       image_fp, progress_callback = load_cb)
+        # Done, pull the trigger and execute the RAM kernel.
+        sbp.complete_boot()
+
+        # Now that we're done, don't allow this method to be
+        # run again.
+        self._kernel_init = True
 
     def getver(self):
         """
@@ -226,6 +285,8 @@ class RAMKernelProtocol(object):
         to any other ``flash_`` method, as well as prior to :meth:`getver`!
         """
         self._send_command(CMD_FLASH_INITIAL)
+        # We have initialized the flash, mark the state.
+        self._flash_init = True
 
     def flash_dump(self, address, size):
         """
