@@ -8,6 +8,8 @@ class MockChannel(ATKChannelI):
     A channel designed for testing protocol handlers.
     """
     def __init__(self):
+        super(MockChannel, self).__init__()
+
         # Data collected from write() calls, in order.
         self.recv_data = []
         # Buffered data to be sent to the calling host.
