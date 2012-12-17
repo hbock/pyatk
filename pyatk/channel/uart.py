@@ -23,12 +23,14 @@
 
 import serial
 
-from pyatk.channel.base import ATKChannelI
+from pyatk.channel import base
 
-class UARTChannel(ATKChannelI):
+class UARTChannel(base.ATKChannelI):
     def __init__(self, port):
         super(UARTChannel, self).__init__()
-        
+
+        self._ramkernel_channel_type = base.CHANNEL_TYPE_UART
+
         self.port = None
         port = serial.serial_for_url(port, do_not_open = True)
         port.baudrate = 115200

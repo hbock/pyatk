@@ -24,7 +24,26 @@ Portable ATK communications channel implementation - base interface
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+CHANNEL_TYPE_UART = 0
+CHANNEL_TYPE_USB  = 1
+
 class ATKChannelI(object):
+    # The RAM kernel expects channels to be identified by the following
+    # enumeration:
+    # enum ChannelType {
+    #   UART,
+    #   USB,
+    # };
+    # Default to UART.  The implementor of this interface is responsible
+    # for setting it to USB if required.
+    def __init__(self):
+        self._ramkernel_channel_type = CHANNEL_TYPE_UART
+
+    @property
+    def chantype(self):
+        """ Return the RAM kernel channel type, as an integer. """
+        return self._ramkernel_channel_type
+
     def open(self):
         """
         Open the communication channel.

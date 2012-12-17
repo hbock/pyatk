@@ -28,27 +28,33 @@ Requires PyUSB 1.0.
 """
 import usb.core
 import usb.util
-from pyatk.channel.base import ATKChannelI
+from pyatk.channel import base
 
 VID_FREESCALE = 0x15a2
 
-class USBChannel(ATKChannelI):
+class USBChannel(base.ATKChannelI):
     """
     USB ATK channel implementation.
     """
-    def __init__(self, vid = VID_FREESCALE, pid = None):
+    def __init__(self, idVendor = VID_FREESCALE, idProduct = None):
         """
-        Prepare to connect to USB channel with idVendor ``vid``
-        and idProduct ``pid``.  If ``pid`` is ``None``, match
-        any device with idVendor ``pid``.
+        Prepare to connect to USB channel with vendor ID ``idVendor``
+        and product ID ``idProduct``.  If ``idProduct`` is ``None``, match
+        any device with ``idVendor``.
 
-        The default idVendor is Freescale Semiconductor (``0x15a2``).
+        The default ``idVendor`` is Freescale Semiconductor (``0x15a2``).
         """
-        if vid is None:
+        super(USBChannel, self).__init__()
+
+        # The RAM kernel expects the channel type variable to be set to 1
+        # if the UART channel is used.
+        self._ramkernel_channel_type = base.CHANNEL_TYPE_USB
+
+        if idVendor is None:
             raise ValueError("Vendor ID argument cannot be None!")
 
-        self.vid = vid
-        self.pid = pid
+        self.vid = idVendor
+        self.pid = idProduct
 
         self.dev = None
         self.interface = None
