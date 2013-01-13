@@ -7,11 +7,19 @@ series processors.
 
 This project is in no way affiliated with or supported by Freescale
 Semiconductor.  For official support, you must use their officially
-supplied tool.
+supplied tool.  Do not contact Freescale about this program.
 
-NOTE: This project is in early development, and currently targets the
-i.MX25 platform.  It is not compatible with other i.MX processors or
-PDKs.
+Current i.MX processor support
+------------------------------
+This project is in early development, and currently targets the
+i.MX25 platform.  While the program attempts support for other
+i.MX processors, the author does not have access to these chips
+and cannot test them.
+
+You are welcome to provide the project maintainer(s) with test
+devices to "guarantee" support for your particular PDK. As always,
+if you have devices you can test and can add support yourself,
+patches are welcome!
 
 Serial Boot Protocol
 --------------------
