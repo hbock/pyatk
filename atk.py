@@ -225,6 +225,10 @@ class ToolkitApplication(object):
             elif self.options.rkl_flash_dump:
                 self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
 
+        except Exception, e:
+            print "Unhandled exception", e
+            raise
+
         finally:
             print("\nEnd of RAM kernel test. Resetting CPU...")
             self.ramkernel.reset()
@@ -253,28 +257,58 @@ class ToolkitApplication(object):
         print("Programming %r to 0x%08x" % (path, start_address))
         block_size = 0x20000
 
-        data_size = os.stat(path).st_size
-        def prog_cb(block, length):
-            print("Programmed block %d, length %d" % (block, length))
-        def erase_cb(block, length):
-            print("Erased block %d, length %d" % (block, length))
-        def verify_cb(block, length):
-            print("Verified block %d, length %d" % (block, length))
+        current_address = 0
+        bar_len = 50
 
-        print("Erasing address %d, %d bytes" % (start_address, data_size))
-        self.ramkernel.flash_erase(start_address, data_size, erase_callback=erase_cb)
+        class Progress(object):
+            def __init__(self):
+                self.program_current = 0
+                self.verify_current  = 0
+                self.current_address = 0
+                self.start_time = time.time()
+
+            def write_progress(self, current, length):
+                ratio = float(self.program_current) / data_size
+                percent = ratio * 100.0
+                bar_on = int(ratio * bar_len)
+                bar_off = bar_len - bar_on
+                total_time = int(time.time() - self.start_time)
+
+                sys.stdout.write("[%s%s] %u/%u B @ 0x%08X (%.2f%%) %02d:%02d\r" % \
+                                 ("="*bar_on, " "*bar_off, current, data_size, current_address,
+                                     percent, total_time / 60, total_time % 60))
+                sys.stdout.flush()
+
+            def program_cb(self, block, write_length):
+                sys.stdout.write("Program ")
+                self.write_progress(self.program_current, write_length)
+                self.program_current += write_length
+
+            def verify_cb(self, block, verify_length):
+                sys.stdout.write("Verify  ")
+                self.write_progress(self.verify_current, verify_length)
+                self.verify_current += verify_length
+
+        data_size = os.stat(path).st_size
+        #def erase_cb(block, length):
+        #    print("Erased block %d, length %d" % (block, length))
+
+        num_blocks = data_size / block_size
+        print("Erasing address %d, %d bytes (%d blocks)" % (start_address, data_size, num_blocks))
+        self.ramkernel.flash_set_bbt(True)
+        self.ramkernel.flash_erase(start_address, data_size)
 
         with open(path, "rb") as file_fp:
             read_size = block_size
             current_address = start_address
             chunk = file_fp.read(read_size)
 
+            prog = Progress()
             while current_address < (start_address + data_size):
-                print("Programming %d bytes @ 0x%08x." % (len(chunk), current_address))
                 self.ramkernel.flash_program(current_address, chunk,
                                              read_back_verify = True,
-                                             program_callback = prog_cb,
-                                             verify_callback  = verify_cb)
+                                             program_callback = prog.program_cb,
+                                             verify_callback  = prog.verify_cb)
                 current_address += len(chunk)
                 chunk = file_fp.read(read_size)
 
@@ -294,11 +328,6 @@ class ToolkitApplication(object):
         print("Dump after erase...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
-
-        def program_cb(block, write_length):
-            print("Programmed block %d, length %d" % (block, write_length))
-        def verify_cb(block, verify_length):
-            print("Verified block %d, length %d" % (block, verify_length))
 
         print("Test flashing DEADBEEF to first page...")
         self.ramkernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
@@ -367,7 +396,7 @@ def main():
     rkgroup.add_option("--ram-kernel-address", action = "store",
                        dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
                        default = -1,
-                       help = ("RAM kernel helper application origin address"
+                       help = ("RAM kernel helper application origin address "
                                "(default to BSP definition)."))
     rkgroup.add_option("--flash-test", "-t", action = "store_true",
                        dest = "rkl_flash_test",
