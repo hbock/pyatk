@@ -346,6 +346,38 @@ class RAMKernelProtocol(object):
 
         return capacity
 
+    def flash_set_bbt(self, enable):
+        """
+        Enable or disable bad block table handling in the RAM kernel's flash layer
+        based on the boolean ``enable``.
+        """
+        self._set_flag_cmd(CMD_FL_BBT, enable)
+
+    def flash_set_interleave(self, enable):
+        """
+        Set or clear the RAM kernel's flash interleave flag based on the
+        boolean ``enable``.
+        """
+        self._set_flag_cmd(CMD_FL_INTLV, enable)
+
+    def flash_set_lba(self, enable):
+        """
+        Set or clear the RAM kernel's LBA flag based on the boolean ``enable``.
+        """
+        self._set_flag_cmd(CMD_FL_LBA, enable)
+
+    def _set_flag_cmd(self, flag_cmd, enable):
+        """ Common set/clear flag command structure helper. """
+        if enable:
+            flag = 1
+        else:
+            flag = 0
+
+        # address = x
+        # param1 = enable (1 or 0)
+        # param2 = x
+        self._send_command(flag_cmd, 0, flag, 0)
+
     def flash_erase(self, start_address, size, erase_callback = None):
         """
         Erase the flash device, starting at ``start_address`` for ``size``
