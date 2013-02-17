@@ -13,6 +13,13 @@ class RAMKernelTests(unittest.TestCase):
         self.rkl._flash_init = True
         self.rkl._kernel_init = True
 
+    def test_kernel_not_yet_init_exception(self):
+        """ Test that working with an uninitialized kernel raises KernelNotInitializedError """
+        rkl = ramkernel.RAMKernelProtocol(self.channel)
+        for command in (rkl.getver, rkl.flash_get_capacity):
+            with self.assertRaises(ramkernel.KernelNotInitializedError) as cm:
+                command()
+
     def test_flash_init_error(self):
         self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_INIT, 0, 0)
         with self.assertRaises(ramkernel.CommandResponseError) as cm:
