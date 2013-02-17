@@ -170,7 +170,7 @@ class SerialBootProtocol(object):
 
         total_length = datasize * length
         # Get variable-length data
-        data = self.channel.read(total_length + 5)
+        data = self.channel.read(total_length)
         if len(data) != total_length:
             raise CommandResponseError("Data received is of invalid length "
                                        "(expected %u bytes, received %u)" % (total_length, len(data)))
