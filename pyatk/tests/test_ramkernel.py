@@ -7,6 +7,11 @@ class RAMKernelTests(unittest.TestCase):
     def setUp(self):
         self.channel = MockChannel()
         self.rkl = ramkernel.RAMKernelProtocol(self.channel)
+        # Pretend we did initialize the chip already so we
+        # can test commands.
+        # Ensuring that these are set will be done in separate tests.
+        self.rkl._flash_init = True
+        self.rkl._kernel_init = True
 
     def test_flash_init_error(self):
         self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_INIT, 0, 0)
