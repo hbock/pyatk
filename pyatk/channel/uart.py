@@ -26,6 +26,11 @@ import serial
 from pyatk.channel import base
 
 class UARTChannel(base.ATKChannelI):
+    """
+    A serial port communications channel.
+
+    The serial port is automatically configured for 115200 baud, 8N1, no flow control.
+    """
     def __init__(self, port):
         super(UARTChannel, self).__init__()
 
@@ -51,7 +56,24 @@ class UARTChannel(base.ATKChannelI):
         self.port.close()
         
     def write(self, data):
+        # Writes cannot time out with no flow control, so ChannelWriteTimeout
+        # is not raised.
         self.port.write(data)
 
     def read(self, length):
-        return self.port.read(length)
+        """
+        Read exactly ``length`` bytes from the UART channel.
+        """
+        data_read = []
+        data_length = 0
+
+        while data_length < length:
+            data = self.port.read((length - data_length))
+            # No data read indicates a timeout has occurred.
+            if data == "":
+                raise base.ChannelReadTimeout(length, "".join(data_read))
+
+            data_read.append(data)
+            data_length += len(data)
+
+        return "".join(data_read)
