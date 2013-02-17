@@ -42,7 +42,7 @@ class UARTChannel(base.ATKChannelI):
         port.parity   = serial.PARITY_NONE
         port.stopbits = serial.STOPBITS_ONE
         port.bytesize = serial.EIGHTBITS
-        port.timeout  = 0.5
+        port.timeout  = 5
         port.rtscts   = False
         port.xonxoff  = False
         port.dsrdtr   = False
