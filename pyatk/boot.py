@@ -195,6 +195,10 @@ class SerialBootProtocol(object):
         return data[0]
 
     def write_memory(self, address, datasize, data):
+        """
+        Perform a memory write of size ``datasize`` (see :const:`DATA_SIZE_BYTE, etc.)
+        with unsigned integer value ``data``.
+        """
         if datasize not in (DATA_SIZE_BYTE,
                             DATA_SIZE_HALFWORD,
                             DATA_SIZE_WORD):
@@ -228,10 +232,7 @@ class SerialBootProtocol(object):
         # The i.MX25 manual lies.  This is the SUCCESS ACK! The error
         # acknowledge is no response after 0x56787856, but the manual
         # says it's the other way around...
-        if ack == ACK_WRITE_SUCCESS:
-            return True
-
-        else:
+        if ack != ACK_WRITE_SUCCESS:
             raise CommandResponseError("Received unexpected status instead "
                                        "of ACK: 0x%08X" % ack)
         
