@@ -234,6 +234,9 @@ class ToolkitApplication(object):
             self.ramkernel.reset()
             self.channel_reinit()
 
+            # Allow channel/bootstrap to settle
+            time.sleep(2)
+
             print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
 
     def ram_kernel_dump(self, start_address, count, page_size = 2048):
