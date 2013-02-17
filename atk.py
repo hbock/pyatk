@@ -171,12 +171,12 @@ class ToolkitApplication(object):
     def memtest(self):
         # Initial memory test
         self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
-        check = self.sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
+        check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFDEAD != check:
             print "ERROR: SRAM write check failed: got 0x%08X" % check        
 
         self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
-        check = self.sbp.read_memory(0x78001000, boot.DATA_SIZE_WORD)
+        check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFCAFE != check:            
             print "ERROR: SRAM write check failed: got 0x%08X" % check
 

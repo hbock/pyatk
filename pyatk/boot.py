@@ -138,14 +138,10 @@ class SerialBootProtocol(object):
     def read_memory(self, address, datasize, length = 1):
         """
         Read memory at ``address``.  Read ``length`` successive
-        addresses of width ``datasize``.
+        addresses of width ``datasize``. Return an array of values read
+        sequentially from memory.
 
-        If ``length`` is 1, return an integer with the value read
-        from memory.  If ``length`` is greater than 1, return
-        an array of values read sequentially from memory.
-
-        All values are converted from CPU byte order to host byte
-        order.
+        All values are converted from device byte order to host byte order.
         """
         if datasize not in (DATA_SIZE_BYTE,
                             DATA_SIZE_HALFWORD,
@@ -159,35 +155,44 @@ class SerialBootProtocol(object):
         self._write_command(command)
 
         # Receive 4-byte ACK
-        ack = self._read_ack()
+        _ = self._read_ack()
 
-        if datasize == DATA_SIZE_BYTE:
-            typecode = "B"
-        elif datasize == DATA_SIZE_HALFWORD:
-            typecode = "H"
-        elif datasize == DATA_SIZE_WORD:
-            typecode = "I"
+        array_typecode = {
+            DATA_SIZE_BYTE: "B",
+            DATA_SIZE_HALFWORD: "H",
+            DATA_SIZE_WORD: "I"
+        }[datasize]
+
         # convert to byte width
         datasize = datasize / 8
         
-        retarray = array.array(typecode)
+        retarray = array.array(array_typecode)
 
+        total_length = datasize * length
         # Get variable-length data
-        for i in xrange(length):
-            data = self.channel.read(datasize)
-            if len(data) != datasize:
-                raise CommandResponseError("Data received is of invalid length")
+        data = self.channel.read(total_length + 5)
+        if len(data) != total_length:
+            raise CommandResponseError("Data received is of invalid length "
+                                       "(expected %u bytes, received %u)" % (total_length, len(data)))
 
-            retarray.fromstring(data)
+        # Push data into array
+        retarray.fromstring(data)
 
         # You send things MSB first, but get them back in processor order.
         if self.byteorder != sys.byteorder:
             retarray.byteswap()
 
-        if length == 1:
-            return retarray[0]
-        else:
-            return retarray
+        return retarray
+
+    def read_memory_single(self, address, datasize):
+        """
+        Perform a single memory read operation of size ``datasize`` at ``address``.
+
+        Return the value read from memory as an integer, converted from device byte order
+        to host byte order.
+        """
+        data = self.read_memory(address, datasize, 1)
+        return data[0]
 
     def write_memory(self, address, datasize, data):
         if datasize not in (DATA_SIZE_BYTE,
