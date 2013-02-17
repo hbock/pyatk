@@ -131,6 +131,13 @@ class RAMKernelError(Exception):
     """
     pass
 
+class KernelNotInitializedError(RAMKernelError):
+    """
+    Exception raised when attempting to interact with an uninitialized
+    RAM kernel.
+    """
+    pass
+
 class ChecksumError(RAMKernelError):
     """
     An error representing a checksum error has occured when reading data
@@ -207,10 +214,10 @@ class RAMKernelProtocol(object):
                       wait_for_response = True):
         # Ensure we've initialized the kernel properly.
         if not self._kernel_init:
-            raise RAMKernelError("Cannot send RAM kernel command without first loading kernel!")
+            raise KernelNotInitializedError("Cannot send RAM kernel command without first loading kernel!")
         if (CMD_FLASH == (command & 0xFF00)) and (CMD_FLASH_INITIAL != command):
             if not self._flash_init:
-                raise RAMKernelError("Cannot use flash-layer command without first using flash_initial()!")
+                raise KernelNotInitializedError("Cannot use flash-layer command without first using flash_initial()!")
 
         rawcmd = struct.pack(">HHIII", HEADER_MAGIC, command, address, param1, param2)
         self.channel.write(rawcmd)
