@@ -99,16 +99,22 @@ class SerialBootProtocol(object):
         status_raw = self.channel.read(4)
         if len(status_raw) != 4:
             raise CommandResponseError("Expected 4-byte status word, "
-                                       "got %r (%r) instead" % (status_raw,
-                                                                binascii.hexlify(status_raw)))
+                                       "got %r (%r) instead" % (status_raw, binascii.hexlify(status_raw)))
 
         return struct.unpack("<I", status_raw)[0]
 
     def _read_ack(self):
+        """
+        Read an ACK from the device channel.  If the ACK is not
+        :const:`ACK_PRODUCTION_PART` or const:`ACK_ENGINEERING_PART`,
+        :exc:`CommandResponseError` is raised.
+        """
         ack = self._read_status()
         if ack not in (ACK_PRODUCTION_PART, ACK_ENGINEERING_PART):
             raise CommandResponseError("Received unexpected status code instead "
                                        "of ACK: 0x%08X" % ack)
+
+        return ack
     
     def _write_command(self, command):
         """
