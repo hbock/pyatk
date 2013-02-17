@@ -1,7 +1,7 @@
 """
 Portable ATK communications channel implementation - base interface
 """
-# Copyright (c) 2012 Harry Bock <bock.harryw@gmail.com>
+# Copyright (c) 2012-2013 Harry Bock <bock.harryw@gmail.com>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
