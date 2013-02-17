@@ -58,8 +58,9 @@ class ATKChannelI(object):
 
     def read(self, length):
         """
-        Read ``length`` bytes from underlying ATK communication
-        channel.
+        Read exactly ``length`` bytes from underlying ATK communication
+        channel.  :exc:`ChannelReadTimeout` is raised if ``length`` bytes
+        could not be read.
         """
         raise NotImplementedError()
 
@@ -67,5 +68,28 @@ class ATKChannelI(object):
         """
         Write ``data`` binary string to underlying ATK communication
         channel.
+
+        :exc:`ChannelWriteTimeout` is raised if ``data`` could not be written
+        in its entirety.
         """
         raise NotImplementedError()
+
+class ChannelTimeout(Exception):
+    """ Exception indicating a timeout reading from or writing to the channel occurred. """
+    pass
+
+class ChannelReadTimeout(ChannelTimeout):
+    """ Exception indicating a timeout reading from the channel occurred. """
+    def __init__(self, read_attempt_length, actual_data_read = ""):
+        #: The actual data that was able to be read from the channel.
+        self.actual_data_read = actual_data_read
+        #: The amount of data requested to be read from the channel.
+        self.read_attempt_length = read_attempt_length
+
+    def __str__(self):
+        return ("Read request of length %u bytes timed out; "
+                "received %u bytes." % (self.read_attempt_length, len(self.actual_data_read)))
+
+class ChannelWriteTimeout(ChannelTimeout):
+    """ Exception indicating a timeout writing to the channel occurred. """
+    pass
