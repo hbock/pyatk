@@ -25,7 +25,6 @@
 Portable Python ATK implementation
 """
 
-import re
 import os
 import sys
 import time
@@ -49,20 +48,20 @@ def print_hex_dump(data, start_address, bytes_per_row = 16):
     while address < len(data):
         sys.stdout.write("%08x : " % (start_address + address))
 
-        row_data = data[address:address + bytes_per_row]
+        row_data = bytearray(data[address:address + bytes_per_row])
 
         for column, byte in enumerate(row_data):
-            sys.stdout.write("%02x " % ord(byte))
+            sys.stdout.write("%02x " % byte)
 
         # If len(row_data) < bytes_per_row, pad with spaces to align
         # the printable view.
         sys.stdout.write(" " * (3 * (bytes_per_row - len(row_data))))
         sys.stdout.write("| ")
 
-        # Replace unprintable ASCII with '.'
-        printable_row_data = re.sub("[^\x20-\x7e]", ".", row_data)
-        for column, byte in enumerate(printable_row_data):
-            sys.stdout.write("%c" % byte)
+        for column, byte in enumerate(row_data):
+            # Replace unprintable ASCII with '.'
+            printable_byte = chr(byte) if (0x20 <= byte <= 0x7e) else "."
+            sys.stdout.write(printable_byte)
 
         sys.stdout.write("\n")
         address += bytes_per_row
