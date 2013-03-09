@@ -46,7 +46,7 @@ def load_board_support_table(info_filename):
     Load board support information from a CSV file with the following
     format:
     """
-    with open(info_filename, "rb") as info_fp:
+    with open(info_filename, "r") as info_fp:
         reader = csv.reader(info_fp, dialect = "excel")
         # Consume and discard header.
         _ = next(reader)
