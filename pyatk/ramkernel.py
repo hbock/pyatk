@@ -24,6 +24,7 @@
 """
 Freescale i.MX ATK RAM kernel protocol implementation
 """
+import os
 import struct
 
 from pyatk import boot
@@ -227,6 +228,19 @@ class RAMKernelProtocol(object):
                 raise CommandResponseError(command, ack, length)
 
             return ack, checksum, length
+
+    def run_image_from_file(self, image_path, bsp_info, load_cb = None):
+        """
+        Convenience wrapper around :meth:`run_image` to load an image
+        from the filesystem.
+
+        See the :meth:`run_image` documentation for more information about
+        the method parameters.
+        """
+        image_stat = os.stat(image_path)
+        with open(image_path, "rb") as image_fp:
+            self.run_image(image_fp, image_stat.st_size, bsp_info, load_cb)
+
 
     def run_image(self, image_fp, image_size, bsp_info, load_cb = None):
         """
