@@ -119,7 +119,7 @@ class ToolkitApplication(object):
         try:
             bsp_table = bspinfo.load_board_support_table(bsp_table_path)
 
-        except IOError, e:
+        except IOError as e:
             raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
 
         self.bsp_info = bsp_table[self.options.bsp_name]
@@ -151,7 +151,7 @@ class ToolkitApplication(object):
                         sys.stdout.write(data)
                         sys.stdout.flush()
 
-        except boot.CommandResponseError, exc:
+        except boot.CommandResponseError as exc:
             print "Command response error: %s" % exc
             sys.exit(1)
 
@@ -224,7 +224,7 @@ class ToolkitApplication(object):
             elif self.options.rkl_flash_dump:
                 self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
 
-        except Exception, e:
+        except Exception as e:
             print "Unhandled exception", e
             raise
 
@@ -451,10 +451,10 @@ def main():
         print "User exit."
         sys.exit(1)
 
-    except IOError, exc:
+    except IOError as exc:
         print "I/O error: %s" % exc
 
-    except ToolkitError, exc:
+    except ToolkitError as exc:
         parser.error(str(exc))
 
 if __name__ == "__main__":
