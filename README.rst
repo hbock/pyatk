@@ -1,9 +1,14 @@
-pyATK - Python implementation of the Freescale Advanced Toolkit
-===============================================================
+``pyATK`` - Python implementation of the Freescale Advanced Toolkit
+===================================================================
 
-pyATK (Python ATK) is an attempt at replacing the Advanced Toolkit
+``pyATK`` (Python ATK) is an attempt at replacing the Advanced Toolkit
 (ATK) program distributed by Freescale Semiconductor for their i.MX
 series processors.
+
+pyATK is a Python library (supporting 2.6+) that allows you to
+develop custom bootstrap tools for i.MX processors.  It also
+comes with a command-line and GUI utility for common operations,
+doubling as a useful API example.
 
 This project is in no way affiliated with or supported by Freescale
 Semiconductor.  For official support, you must use their officially
@@ -11,6 +16,7 @@ supplied tool.  Do not contact Freescale about this program.
 
 Current i.MX processor support
 ------------------------------
+
 This project is in early development, and currently targets the
 i.MX25 platform.  While the program attempts support for other
 i.MX processors, the author does not have access to these chips
