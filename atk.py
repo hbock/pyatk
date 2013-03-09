@@ -39,7 +39,8 @@ from pyatk import bspinfo
 
 def print_hex_dump(data, start_address, bytes_per_row = 16):
     """ Adjustable string hex dumper. """
-    for address in xrange(0, len(data), bytes_per_row):
+    address = 0
+    while address < len(data):
         sys.stdout.write("%08x : " % (start_address + address))
 
         row_data = data[address:address + bytes_per_row]
@@ -58,6 +59,7 @@ def print_hex_dump(data, start_address, bytes_per_row = 16):
             sys.stdout.write("%c" % byte)
 
         sys.stdout.write("\n")
+        address += bytes_per_row
 
 class ToolkitError(Exception):
     def __init__(self, msg):
@@ -242,10 +244,13 @@ class ToolkitApplication(object):
         print("Dumping flash @ 0x%08x, count %d" % (start_address, count))
         print("Also dumping to dump.bin...")
         with open("dump.bin", "wb") as dump_fp:
-            for address in xrange(start_address, start_address + count, page_size):
+            address = start_address
+            while address < (start_address + count):
                 data = self.ramkernel.flash_dump(address, page_size)
                 print_hex_dump(data, address)
                 dump_fp.write(data)
+
+                address += page_size
 
     def ram_kernel_flash_file(self, path, start_address):
         ## FIXME this doesn't quite work yet... at least, I haven't gotten
