@@ -37,6 +37,12 @@ from pyatk import boot
 from pyatk import ramkernel
 from pyatk import bspinfo
 
+def writeln(line = ""):
+    """
+    Write a line to standard output.
+    """
+    sys.stdout.write(line + "\n")
+
 def print_hex_dump(data, start_address, bytes_per_row = 16):
     """ Adjustable string hex dumper. """
     address = 0
@@ -125,15 +131,15 @@ class ToolkitApplication(object):
             raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
 
         self.bsp_info = bsp_table[self.options.bsp_name]
-        print("Selected BSP %r." % self.options.bsp_name)
-        print("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
+        writeln("Selected BSP %r." % self.options.bsp_name)
+        writeln("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
                                                  self.bsp_info.memory_bottom_address))
 
         self.load_mem_initializer()
         try:
             self.channel.open()
             status = self.sbp.get_status()
-            print "Boot status:", boot.get_status_string(status)
+            writeln("Boot status: %s" % boot.get_status_string(status))
             
             self.memtest()
             self.mem_initialize()
@@ -145,8 +151,9 @@ class ToolkitApplication(object):
                 self.run_application(self.options.application_file, self.options.application_address)
 
             if self.options.read_forever:
-                print "Continuously reading from channel. Press Ctrl-C to exit."
-                print
+                writeln("Continuously reading from channel. Press Ctrl-C to exit.")
+                writeln()
+
                 while True:
                     data = self.channel.read(10)
                     if data != "":
@@ -154,7 +161,7 @@ class ToolkitApplication(object):
                         sys.stdout.flush()
 
         except boot.CommandResponseError as exc:
-            print "Command response error: %s" % exc
+            writeln("Command response error: %s" % exc)
             sys.exit(1)
 
         finally:
@@ -175,16 +182,16 @@ class ToolkitApplication(object):
         self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
         check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFDEAD != check:
-            print "ERROR: SRAM write check failed: got 0x%08X" % check        
+            writeln("ERROR: SRAM write check failed: got 0x%08X" % check)
 
         self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
         check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
         if 0xBEEFCAFE != check:            
-            print "ERROR: SRAM write check failed: got 0x%08X" % check
+            writeln("ERROR: SRAM write check failed: got 0x%08X" % check)
 
     def mem_initialize(self):
         for initaddr, initval, initwidth in self.mem_init_data:
-            print "init: write 0x%08X to 0x%08X (width %d)" % (initval, initaddr, initwidth)
+            writeln("init: write 0x%08X to 0x%08X (width %d)" % (initval, initaddr, initwidth))
             self.sbp.write_memory(initaddr, initwidth, initval)
 
     def run_ram_kernel(self):
@@ -192,9 +199,9 @@ class ToolkitApplication(object):
         rk_addr = self.options.ram_kernel_address
         if rk_addr == -1:
             rk_addr = self.bsp_info.ram_kernel_origin
-            print("RAM kernel origin not specified; using BSP value 0x%08X" % rk_addr)
+            writeln("RAM kernel origin not specified; using BSP value 0x%08X" % rk_addr)
         else:
-            print("Using user-specified RAM kernel origin: 0x%08X" % rk_addr)
+            writeln("Using user-specified RAM kernel origin: 0x%08X" % rk_addr)
 
         def load_cb(current, total):
             bar_len = 50
@@ -211,12 +218,12 @@ class ToolkitApplication(object):
         # Re-open channel
         self.channel_reinit()
 
-        print("RAM kernel initialize flash.")
+        writeln("RAM kernel initialize flash.")
         self.ramkernel.flash_initial()
-        print("RAM kernel getver():")
+        writeln("RAM kernel getver():")
         imxtype, flashmodel = self.ramkernel.getver()
-        print("Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel))
-        print("RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024))
+        writeln("Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel))
+        writeln("RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024))
 
         try:
             if self.options.rkl_flash_test:
@@ -227,22 +234,22 @@ class ToolkitApplication(object):
                 self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
 
         except Exception as e:
-            print "Unhandled exception", e
+            writeln("Unhandled exception: %s" % e)
             raise
 
         finally:
-            print("\nEnd of RAM kernel test. Resetting CPU...")
+            writeln("\nEnd of RAM kernel test. Resetting CPU...")
             self.ramkernel.reset()
             self.channel_reinit()
 
             # Allow channel/bootstrap to settle
             time.sleep(2)
 
-            print("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
+            writeln("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
 
     def ram_kernel_dump(self, start_address, count, page_size = 2048):
-        print("Dumping flash @ 0x%08x, count %d" % (start_address, count))
-        print("Also dumping to dump.bin...")
+        writeln("Dumping flash @ 0x%08x, count %d" % (start_address, count))
+        writeln("Also dumping to dump.bin...")
         with open("dump.bin", "wb") as dump_fp:
             address = start_address
             while address < (start_address + count):
@@ -261,7 +268,7 @@ class ToolkitApplication(object):
         if start_address is None:
             raise ToolkitError("Flash start address not specified!")
 
-        print("Programming %r to 0x%08x" % (path, start_address))
+        writeln("Programming %r to 0x%08x" % (path, start_address))
         block_size = 0x20000
 
         current_address = 0
@@ -298,10 +305,10 @@ class ToolkitApplication(object):
 
         data_size = os.stat(path).st_size
         #def erase_cb(block, length):
-        #    print("Erased block %d, length %d" % (block, length))
+        #    writeln("Erased block %d, length %d" % (block, length))
 
         num_blocks = data_size / block_size
-        print("Erasing address %d, %d bytes (%d blocks)" % (start_address, data_size, num_blocks))
+        writeln("Erasing address %d, %d bytes (%d blocks)" % (start_address, data_size, num_blocks))
         self.ramkernel.flash_set_bbt(True)
         self.ramkernel.flash_erase(start_address, data_size)
 
@@ -320,29 +327,29 @@ class ToolkitApplication(object):
                 chunk = file_fp.read(read_size)
 
     def ram_kernel_flash_test(self):
-        print("Running RKL flash test.")
-        print("read flash first page:")
+        writeln("Running RKL flash test.")
+        writeln("read flash first page:")
         start_address = 0x0000
         flash_page = self.ramkernel.flash_dump(start_address, 1024)
         print_hex_dump(flash_page, start_address)
 
         def erase_cb(block_index, block_size):
-            print("Erased block %d (size %d bytes)." % (block_index, block_size))
+            writeln("Erased block %d (size %d bytes)." % (block_index, block_size))
 
         size = 4096 * 4
-        print("Erasing first %d bytes." % size)
+        writeln("Erasing first %d bytes." % size)
         self.ramkernel.flash_erase(start_address, size, erase_callback = erase_cb)
-        print("Dump after erase...")
+        writeln("Dump after erase...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
-        print("Test flashing DEADBEEF to first page...")
+        writeln("Test flashing DEADBEEF to first page...")
         self.ramkernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
                                      read_back_verify = True,
                                      program_callback = program_cb,
                                      verify_callback  = verify_cb)
 
-        print("Dump after program...")
+        writeln("Dump after program...")
         flash_page = self.ramkernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
@@ -357,12 +364,12 @@ class ToolkitApplication(object):
             sys.stdout.flush()
 
         with open(filename, "rb") as appl_fd:
-            print "Writing application %r to 0x%08X" % (filename, load_address)
+            writeln("Writing application %r to 0x%08X" % (filename, load_address))
             self.sbp.write_file(boot.FILE_TYPE_APPLICATION,
                                 load_address, image_size, appl_fd, progress_callback = progcb)
             self.sbp.complete_boot()
-            print
-            print "Application write/execute OK!"
+
+            writeln("\nApplication write/execute OK!")
 
 def read_initialization_file(filename):
     with open(filename, "r") as initfp:
@@ -453,11 +460,11 @@ def main():
         atkprog.run()
 
     except KeyboardInterrupt:
-        print "User exit."
+        writeln("User exit.")
         sys.exit(1)
 
     except IOError as exc:
-        print "I/O error: %s" % exc
+        writeln("I/O error: %s" % exc)
 
     except ToolkitError as exc:
         parser.error(str(exc))
