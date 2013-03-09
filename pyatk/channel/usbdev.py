@@ -150,7 +150,7 @@ class USBChannel(base.ATKChannelI):
             try:
                 self.endpoint_out.write(pkt, timeout = self.write_timeout)
                 bytes_written += len(pkt)
-            except usb.USBError, e:
+            except usb.USBError as e:
                 raise IOError(str(e))
 
     def read(self, length):
@@ -167,7 +167,7 @@ class USBChannel(base.ATKChannelI):
                 ## we are expecting.
                 self.internal_read_buffer += data
 
-            except usb.USBError, e:
+            except usb.USBError as e:
                 raise IOError(str(e))
 
         # pull off the requested amount of data, if we did not time out.
