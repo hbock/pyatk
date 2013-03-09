@@ -175,8 +175,8 @@ class CommandResponseError(RAMKernelError):
 def calculate_checksum(buf):
     """ Perform a simple 16-bit checksum on the bytes in ``buf``. """
     checksum = 0
-    for byte in buf:
-        checksum = (checksum + ord(byte)) & 0x0000FFFF
+    for byte in bytearray(buf):
+        checksum = (checksum + byte) & 0x0000FFFF
 
     return checksum
 
@@ -325,7 +325,7 @@ class RAMKernelProtocol(object):
             if length > 0:
                 payload = self.channel.read(length)
             else:
-                payload = ""
+                payload = b""
 
             mychecksum = calculate_checksum(payload)
             if mychecksum != checksum:
@@ -350,7 +350,7 @@ class RAMKernelProtocol(object):
 
             total_bytes += read_payload(length)
 
-        return "".join(payload_list)
+        return b"".join(payload_list)
 
     def flash_get_capacity(self):
         """
