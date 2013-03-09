@@ -297,7 +297,7 @@ class RAMKernelProtocol(object):
         if length > 0:
             payload = self.channel.read(length)
         else:
-            payload = ""
+            payload = b""
 
         return checksum, payload
 

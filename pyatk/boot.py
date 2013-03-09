@@ -246,7 +246,7 @@ class SerialBootProtocol(object):
 
         while bytes_consumed < length:
             chunk = stream.read(chunk_size)
-            if chunk == "":
+            if chunk == b"":
                 raise ValueError("File stream ends early after %u "
                                  "bytes consumed." % bytes_consumed)
             bytes_consumed += len(chunk)

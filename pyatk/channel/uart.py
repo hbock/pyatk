@@ -70,10 +70,10 @@ class UARTChannel(base.ATKChannelI):
         while data_length < length:
             data = self.port.read((length - data_length))
             # No data read indicates a timeout has occurred.
-            if data == "":
-                raise base.ChannelReadTimeout(length, "".join(data_read))
+            if data == b"":
+                raise base.ChannelReadTimeout(length, b"".join(data_read))
 
             data_read.append(data)
             data_length += len(data)
 
-        return "".join(data_read)
+        return b"".join(data_read)
