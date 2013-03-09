@@ -40,7 +40,7 @@ class MockChannel(ATKChannelI):
     def queue_data(self, data):
         self.send_queue.append(data)
 
-    def queue_rkl_response(self, ackcode, checksum, length, payload = ""):
+    def queue_rkl_response(self, ackcode, checksum, length, payload = b""):
         """
         Queue up an RKL response to send.
         """
@@ -59,7 +59,7 @@ class MockChannel(ATKChannelI):
         """
         Read up to length bytes of buffered data from this channel.
         """
-        return_data = ""
+        return_data = b""
 
         while len(return_data) < length and len(self.send_queue) > 0:
             new_data = self.send_queue.popleft()

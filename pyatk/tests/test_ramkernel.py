@@ -39,10 +39,10 @@ class RAMKernelTests(unittest.TestCase):
         # Test CMD_GETVER responses of various shapes and sizes, including
         # with payloads containing non-ASCII data.
         for imx_version, flash_model in (
-            (0xface, "HAL 9000"),
-            (0xbeef, "Taste the biscuit"),
-            (0x2057, "Silly rabbit Freescale's for kids"),
-            (0xfeed, "So I should \x1bprobably sleep\xAF\x99 at some point \x00tonight"),
+            (0xface, b"HAL 9000"),
+            (0xbeef, b"Taste the biscuit"),
+            (0x2057, b"Silly rabbit Freescale's for kids"),
+            (0xfeed, b"So I should \x1bprobably sleep\xAF\x99 at some point \x00tonight"),
         ):
             self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, imx_version,
                                             len(flash_model), flash_model)
@@ -139,7 +139,7 @@ class RAMKernelTests(unittest.TestCase):
         Ensure flash_dump in normal operation works correctly - multiple FLASH_PARTLY responses,
         checksum validation, etc.
         """
-        data = "testing random \x00 data 1 2 \x03"
+        data = b"testing random \x00 data 1 2 \x03"
         cksum = ramkernel.calculate_checksum(data)
         self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data), data)
         # NOTE: the RKL main() never sends ACK_SUCCESS for CMD_FLASH_DUMP - only
@@ -151,28 +151,28 @@ class RAMKernelTests(unittest.TestCase):
         self.assertEqual(data, dump_data)
 
         test_data =  (
-            "testing random \x00 data 1 2 \x03",
-            "cold wind to valhalla",
-            "\xff" * 1024,
-            "\x00" * 2048
+            b"testing random \x00 data 1 2 \x03",
+            b"cold wind to valhalla",
+            b"\xff" * 1024,
+            b"\x00" * 2048
         )
         # Multipart
         for data_chunk in test_data:
              cksum = ramkernel.calculate_checksum(data_chunk)
              self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data_chunk), data_chunk)
 
-        total_test_data = "".join(test_data)
+        total_test_data = b"".join(test_data)
         # Don't care about the address.
         dump_data = self.rkl.flash_dump(0x0000, len(total_test_data))
 
-        self.assertEqual("".join(test_data), dump_data)
+        self.assertEqual(total_test_data, dump_data)
 
     def test_flash_dump_checksum_error(self):
         """
         Ensure flash_dump handles checksum errors correctly, by raising ramkernel.ChecksumError.
         flash_dump should set ChecksumError internal values correctly.
         """
-        data = "testing random \x00 data 1 2 \x03"
+        data = b"testing random \x00 data 1 2 \x03"
         real_cksum = ramkernel.calculate_checksum(data)
         fake_cksum = (real_cksum + 1) & 0xFFFF
         self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, fake_cksum, len(data), data)
@@ -185,23 +185,23 @@ class RAMKernelTests(unittest.TestCase):
 
         ## Test with initial successes, then a failed checksum
         test_data =  (
-            "testing random \x00 data 1 2 \x03",
-            "cold wind to valhalla",
-            "\xff" * 1024,
-            "\x00" * 2048
+            b"testing random \x00 data 1 2 \x03",
+            b"cold wind to valhalla",
+            b"\xff" * 1024,
+            b"\x00" * 2048
         )
         for data_chunk in test_data:
             # Calculate the real checksum for these chunks
              cksum = ramkernel.calculate_checksum(data_chunk)
              self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data_chunk), data_chunk)
         # Now for the bad checksum...
-        data = "testing random \x00 data 1 2 \x03"
+        data = b"testing random \x00 data 1 2 \x03"
         real_cksum = ramkernel.calculate_checksum(data)
         fake_cksum = (real_cksum + 1) & 0xFFFF
         self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, fake_cksum, len(data), data)
         self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
 
-        total_data_length = len("".join(test_data + (data,)))
+        total_data_length = len(b"".join(test_data + (data,)))
         with self.assertRaises(ramkernel.ChecksumError) as cm:
             self.rkl.flash_dump(0x0000, total_data_length)
 
@@ -212,7 +212,7 @@ class RAMKernelTests(unittest.TestCase):
         """
         Ensure flash_dump handles partial read errors correctly.
         """
-        data = "testing random \x00 data 1 2 \x03"
+        data = b"testing random \x00 data 1 2 \x03"
         cksum = ramkernel.calculate_checksum(data)
         self.channel.queue_rkl_response(ramkernel.ACK_FLASH_PARTLY, cksum, len(data), data)
         self.channel.queue_rkl_response(ramkernel.FLASH_ERROR_READ, 0, 0)
@@ -251,8 +251,8 @@ class RAMKernelTests(unittest.TestCase):
         self.assertRaises(ValueError, self.rkl.flash_program, 0, "asdf", file_format = -1)
 
     def test_flash_program(self):
-        data = "the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
-        partial_data_len = len(data)/2
+        data = b"the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
+        partial_data_len = len(data) // 2
 
         def queue_responses():
             self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
@@ -278,8 +278,8 @@ class RAMKernelTests(unittest.TestCase):
         self.assertEqual(callback_data[1][1], len(data) - partial_data_len)
 
     def test_flash_program_verify(self):
-        data = "the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
-        partial_data_len = len(data)/2
+        data = b"the quick brown fox is tired of typing today \x00 \x12\x13\r\na"
+        partial_data_len = len(data) // 2
 
         def queue_responses():
             self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, len(data))
