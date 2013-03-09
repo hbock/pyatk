@@ -62,7 +62,7 @@ class USBChannel(base.ATKChannelI):
         self.endpoint_out = None
         self.configuration = None
 
-        self.internal_read_buffer = ""
+        self.internal_read_buffer = b""
 
         self.write_timeout = 2000 # ms
         self.read_timeout = 1000 # ms
@@ -175,4 +175,3 @@ class USBChannel(base.ATKChannelI):
         self.internal_read_buffer = self.internal_read_buffer[length:]
 
         return return_data
-
