@@ -49,7 +49,7 @@ def load_board_support_table(info_filename):
     with open(info_filename, "rb") as info_fp:
         reader = csv.reader(info_fp, dialect = "excel")
         # Consume and discard header.
-        _ = reader.next()
+        _ = next(reader)
 
         new_bsp_table = collections.OrderedDict()
         for row in reader:
