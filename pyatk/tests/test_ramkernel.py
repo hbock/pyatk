@@ -55,7 +55,7 @@ class RAMKernelTests(unittest.TestCase):
         """ Test the flash_erase API with no callback specified. """
         block_size = 0x20000
 
-        for block_index in xrange(50):
+        for block_index in range(50):
             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_ERASE, block_index, block_size)
         self.channel.queue_rkl_response(ramkernel.ACK_SUCCESS, 0, 0)
 
@@ -69,7 +69,7 @@ class RAMKernelTests(unittest.TestCase):
         # Queue 50 block erase responses, each with a different block size.
         # Generally the block size returned by RKL is fixed, but if it is not,
         # we should be sending the right value.
-        for block_index in xrange(50):
+        for block_index in range(50):
             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_ERASE,
                                             block_index,
                                             block_size + block_index)
@@ -84,7 +84,7 @@ class RAMKernelTests(unittest.TestCase):
         self.rkl.flash_erase(0x0, 1, erase_callback=erase_cb)
 
         self.assertEqual(len(callback_data), 50)
-        for index, (cb_block_idx, cb_block_sz) in zip(xrange(50), callback_data):
+        for index, (cb_block_idx, cb_block_sz) in enumerate(callback_data):
             self.assertEqual(cb_block_idx, index)
             self.assertEqual(cb_block_sz, block_size + index)
 
@@ -95,7 +95,7 @@ class RAMKernelTests(unittest.TestCase):
 
         # queue up 25 good partial responses followed by an error.
         # The callback should be called for each of the 25 good responses.
-        for block_index in xrange(25):
+        for block_index in range(25):
             self.channel.queue_rkl_response(ramkernel.ACK_FLASH_ERASE,
                                             block_index,
                                             block_size + block_index)
@@ -112,7 +112,7 @@ class RAMKernelTests(unittest.TestCase):
         self.assertEqual(cm.exception.command, ramkernel.CMD_FLASH_ERASE)
 
         self.assertEqual(len(callback_data), 25)
-        for index, (cb_block_idx, cb_block_sz) in zip(xrange(25), callback_data):
+        for index, (cb_block_idx, cb_block_sz) in enumerate(callback_data):
             self.assertEqual(cb_block_idx, index)
             self.assertEqual(cb_block_sz, block_size + index)
 
