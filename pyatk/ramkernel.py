@@ -25,7 +25,6 @@
 Freescale i.MX ATK RAM kernel protocol implementation
 """
 import struct
-from StringIO import StringIO
 
 from pyatk import boot
 
@@ -229,24 +228,24 @@ class RAMKernelProtocol(object):
 
             return ack, checksum, length
 
-    def run_image(self, image_data, bsp_info, load_cb = None):
+    def run_image(self, image_fp, bsp_info, load_cb = None):
         """
-        Run the RAM kernel binary in ``image_data`` using :class:`BoardSupportInfo`
+        Run the RAM kernel binary in ``image_fp`` using :class:`BoardSupportInfo`
         instance ``bsp_info`` to determine memory locations and the image origin.
+        ``image_fp`` must be a buffered I/O object (e.g., a :class:`io.BytesIO`
+        instance or file object opened "rb").
 
-        If ``load_cb`` is specified, call this incrementally
+        If ``load_cb`` is specified, it will be called incrementally
         as the RAM kernel is transferred to memory.
 
-        This method **must** be called to start the RAM kernel.
+        This method **must** be called to start the RAM kernel, before other
+        RAM kernel methods are used.
         """
         if self._kernel_init:
             raise ValueError("RAM kernel already loaded and initialized.")
 
         # The RAM kernel image must be loaded via the iMX SBP.
         sbp = boot.SerialBootProtocol(self.channel)
-
-        # Make the kernel image streamable
-        image_fp = StringIO(image_data)
 
         # In order for the RAM kernel to operate using the correct channel,
         # you must write the RAM kernel channel type to the platform
