@@ -123,7 +123,7 @@ class SerialBootProtocol(object):
         """
         # Pad command to 16 bytes
         if len(command) < 16:
-            command += "\x00" * (16 - len(command))
+            command += b"\x00" * (16 - len(command))
 
         self.channel.write(command)
 
@@ -164,7 +164,7 @@ class SerialBootProtocol(object):
         }[datasize]
 
         # convert to byte width
-        datasize = datasize / 8
+        datasize = datasize // 8
         
         retarray = array.array(array_typecode)
 
@@ -265,7 +265,7 @@ class SerialBootProtocol(object):
         command = struct.pack(">H7x4s", CMD_REENUMERATE_USB, serialnum)
         self._write_command(command)
         resp = self.channel.read(4)
-        if resp != "\x89\x23\x23\x89":
+        if resp != b"\x89\x23\x23\x89":
             raise CommandResponseError("Invalid re-enumerate response: %r" % resp)
 
     def complete_boot(self):
