@@ -228,10 +228,12 @@ class RAMKernelProtocol(object):
 
             return ack, checksum, length
 
-    def run_image(self, image_fp, bsp_info, load_cb = None):
+    def run_image(self, image_fp, image_size, bsp_info, load_cb = None):
         """
-        Run the RAM kernel binary in ``image_fp`` using :class:`BoardSupportInfo`
-        instance ``bsp_info`` to determine memory locations and the image origin.
+        Run the RAM kernel binary in ``image_fp``, of size ``image_size``,
+        using :class:`BoardSupportInfo` instance ``bsp_info`` to
+        determine memory locations and the image origin.
+
         ``image_fp`` must be a buffered I/O object (e.g., a :class:`io.BytesIO`
         instance or file object opened "rb").
 
@@ -258,7 +260,7 @@ class RAMKernelProtocol(object):
                          self.channel.chantype)
         # Load the kernel.
         sbp.write_file(boot.FILE_TYPE_APPLICATION,
-                       bsp_info.ram_kernel_origin, len(image_data),
+                       bsp_info.ram_kernel_origin, image_size,
                        image_fp, progress_callback = load_cb)
         # Done, pull the trigger and execute the RAM kernel.
         sbp.complete_boot()

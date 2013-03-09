@@ -212,8 +212,9 @@ class ToolkitApplication(object):
 
         # Load the RK image in one go - it's usually << 100 Kb, memory
         # is cheap, right? :)
+        image_stat = os.stat(rk_file)
         with open(rk_file, "rb") as rk_image_fp:
-            self.ramkernel.run_image(rk_image_fp, self.bsp_info, load_cb)
+            self.ramkernel.run_image(rk_image_fp, image_stat.st_size, self.bsp_info, load_cb)
 
         # Re-open channel
         self.channel_reinit()
