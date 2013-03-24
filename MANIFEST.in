@@ -1,0 +1,6 @@
+include *.rst
+include bspinfo.csv
+include AUTHORS
+include COPYING
+include ChangeLog
+recursive-include usb-driver-win32 *.rst *.dll *.sys *.inf
