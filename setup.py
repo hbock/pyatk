@@ -16,7 +16,7 @@ setup(
     scripts=['bin/flashtool.py'],
     install_requires=[
         'pyserial >= 2.6',
-        'pyusb >= 1.0.0',
+        'pyusb >= 1.0.0a3',
     ],
 
     license='BSD',
