@@ -76,9 +76,23 @@ class ToolkitError(Exception):
 
 class ToolkitApplication(object):
     def __init__(self, options):
+        bsp_table_path = os.path.join(os.path.dirname(__file__), "bspinfo.conf")
+
+        try:
+            # TODO: look in home directory too!
+            bsp_table = bspinfo.load_board_support_table([bsp_table_path])
+        except IOError as e:
+            raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
+
+        self.bsp_info = bsp_table[options.bsp_name]
+
         # Some care is needed for USB enumeration timing.
         self._usb = (options.usb_vid_pid is not None)
 
+        vid = None
+        pid = None
+
+        # VID/PID specified explicitly
         if options.usb_vid_pid:
             try:
                 if ":" in options.usb_vid_pid:
@@ -92,15 +106,18 @@ class ToolkitApplication(object):
             except ValueError:
                 raise ToolkitError("Could not convert USB VID/PID %r to integer." % options.usb_vid_pid)
 
-            else:
-                self.channel = USBChannel(idVendor = vid, idProduct = pid)
+        # VID/PID inferred from BSP configuration
+        else:
+            vid = self.bsp_info.usb_vid
+            pid = self.bsp_info.usb_pid
 
-        elif options.serialport:
+
+        if options.serialport:
             self.channel = UARTChannel(options.serialport)
+        else:
+            self.channel = USBChannel(idVendor = vid, idProduct = pid)
 
         self.options = options
-
-        self.bsp_info = None
         self.sbp = boot.SerialBootProtocol(self.channel)
         self.ramkernel = ramkernel.RAMKernelProtocol(self.channel)
         self.mem_init_data = []
@@ -122,14 +139,6 @@ class ToolkitApplication(object):
             self.channel.open()
 
     def run(self):
-        bsp_table_path = os.path.abspath("bspinfo.csv")
-        try:
-            bsp_table = bspinfo.load_board_support_table(bsp_table_path)
-
-        except IOError as e:
-            raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
-
-        self.bsp_info = bsp_table[self.options.bsp_name]
         writeln("Selected BSP %r." % self.options.bsp_name)
         writeln("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
                                                  self.bsp_info.memory_bottom_address))
@@ -429,10 +438,10 @@ def main():
     comgroup = OptionGroup(parser, "Communications")
     comgroup.add_option("--serialport", "-s", action = "store",
                         dest = "serialport", metavar = "DEVICE",
-                        help = "Serial port device name.")
+                        help = "Use serial port DEVICE instead of USB.")
     comgroup.add_option("--usb", "-u", action = "store",
                         dest = "usb_vid_pid", metavar = "VID[:PID]",
-                        help = "USB vendor ID/product ID")
+                        help = "Override USB vendor ID/product ID in BSP data.")
     comgroup.add_option("--read-forever", "-r", action = "store_true",
                         dest = "read_forever", default = False,
                         help  = ("Read continuously from communication channel after "
@@ -445,8 +454,6 @@ def main():
 
     if not options.bsp_name:
         parser.error("Please select a BSP name.")
-    if not (options.serialport or options.usb_vid_pid):
-        parser.error("Please select a serial port/USB device.")
     if options.serialport and options.usb_vid_pid:
         parser.error("Cannot select both a serial port and a USB device!")
 

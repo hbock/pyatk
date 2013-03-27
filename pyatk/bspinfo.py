@@ -20,12 +20,22 @@
 # ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+import sys
 import collections
-import csv
+if sys.version_info > (3, 0):
+    from configparser import ConfigParser
+# Python 2.x support
+else:
+    from ConfigParser import SafeConfigParser as ConfigParser
+
 
 #: A namedtuple for BSP information relevant to ATK.
 BoardSupportInfo = collections.namedtuple(
     "BoardSupportInfo", (
+        # Long description of the board
+        "description",
+
         # The base memory address for the BSP.
         "base_memory_address",
 
@@ -37,31 +47,47 @@ BoardSupportInfo = collections.namedtuple(
         # This could be built differently for a custom design's BSP,
         # so we allow manually specifying it.
         "ram_kernel_origin",
+
+        # USB vendor ID
+        "usb_vid",
+        # USB product ID
+        "usb_pid",
     )
 )
 BSI = lambda *args: BoardSupportInfo._make(args)
 
-def load_board_support_table(info_filename):
+def load_board_support_table(info_filename_list):
     """
     Load board support information from a CSV file with the following
     format:
     """
-    with open(info_filename, "r") as info_fp:
-        reader = csv.reader(info_fp, dialect = "excel")
-        # Consume and discard header.
-        _ = next(reader)
+    reader = ConfigParser()
+    reader.read(info_filename_list)
 
-        new_bsp_table = collections.OrderedDict()
-        for row in reader:
-            if len(row) < 4:
-                pass
+    new_bsp_table = collections.OrderedDict()
+    for section in reader.sections():
+        def getint(key):
+            return int(reader.get(section, key), 0)
 
-            bsp_name = row[0]
-            bsp_base_addr   = int(row[1], 0)
-            bsp_bottom_addr = int(row[2], 0)
-            bsp_ram_kernel_origin = int(row[3], 0)
+        bsp_name = section
+        bsp_desc = reader.get(section, "description")
 
-            new_bsp_info = BSI(bsp_base_addr, bsp_bottom_addr, bsp_ram_kernel_origin)
-            new_bsp_table[bsp_name] = new_bsp_info
+        bsp_base_addr = getint("sdram_start")
+        bsp_bottom_addr = getint("sdram_end")
+        bsp_ram_kernel_origin = getint("ram_kernel_origin")
 
-        return new_bsp_table
+        bsp_usb_vid = getint("usb_vid")
+        bsp_usb_pid = getint("usb_pid")
+
+        new_bsp_info = BSI(
+            bsp_desc,
+            bsp_base_addr,
+            bsp_bottom_addr,
+            bsp_ram_kernel_origin,
+            bsp_usb_vid,
+            bsp_usb_pid,
+        )
+
+        new_bsp_table[bsp_name] = new_bsp_info
+
+    return new_bsp_table
