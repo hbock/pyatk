@@ -1,0 +1,224 @@
+#!/usr/bin/env python
+"""
+Simple utility to generate operating-system specific config files for libusb connectivity.
+
+This script currently supports:
+ - Win32 INF files
+ - udevd config files
+
+"""
+import sys
+from pyatk.bspinfo import load_board_support_table
+
+WIN32_1 = """; imxusb.inf
+; ----------
+; libusb-win32 driver file for i.MX serial bootloader / recovery mode
+; USB interface.
+;
+; This is part of the pyATK distribution.
+;
+; Copyright (c) 2010 libusb-win32 (GNU LGPL)
+[Strings]
+VendorName = "Freescale Semiconductor, Inc."
+SourceName = "pyATK Installer"
+
+"""
+
+WIN32_2 = """[Version]
+Signature   = "$Windows NT$"
+Class       = "libusb-win32 devices"
+ClassGuid   = {EB781AAF-9C70-4523-A5DF-642A87ECA567}
+Provider    = "libusb-win32"
+; ??? We don't have a .cat file, but it seems to work anyway.
+; I think this is for Windows DDK signatures.
+CatalogFile = mx25-usb.cat
+DriverVer   = 01/17/2012, 1.2.6.0
+
+[ClassInstall32]
+Addreg = libusb_class_install_add_reg
+
+[libusb_class_install_add_reg]
+HKR,,,0,"libusb-win32 devices"
+HKR,,Icon,,-20
+
+[Manufacturer]
+%VendorName% = Devices, NT, NTAMD64
+
+;--------------------------------------------------------------------------
+; libusb-win32 files
+;--------------------------------------------------------------------------
+
+[SourceDisksNames]
+1 = %SourceName%
+
+[SourceDisksFiles.x86]
+libusb0.sys     = 1,x86
+libusb0_x86.dll = 1,x86
+
+[SourceDisksFiles.amd64]
+libusb0.sys     = 1,amd64
+libusb0.dll     = 1,amd64
+libusb0_x86.dll = 1,x86
+
+[DestinationDirs]
+libusb_files_sys       = 10,system32\drivers
+libusb_files_dll       = 10,system32
+libusb_files_dll_wow64 = 10,syswow64
+libusb_files_dll_x86   = 10,system32
+
+[libusb_files_sys]
+libusb0.sys
+
+[libusb_files_dll]
+libusb0.dll
+
+[libusb_files_dll_x86]
+libusb0.dll, libusb0_x86.dll
+
+[libusb_files_dll_wow64]
+libusb0.dll, libusb0_x86.dll
+
+;--------------------------------------------------------------------------
+; libusb-win32 device driver
+;--------------------------------------------------------------------------
+
+[LIBUSB_WIN32_DEV.NT]
+CopyFiles = libusb_files_sys, libusb_files_dll_x86
+
+[LIBUSB_WIN32_DEV.NTAMD64]
+CopyFiles = libusb_files_sys, libusb_files_dll, libusb_files_dll_wow64
+
+[LIBUSB_WIN32_DEV.NT.HW]
+DelReg = libusb_del_reg_hw
+AddReg = libusb_add_reg_hw
+
+[LIBUSB_WIN32_DEV.NTAMD64.HW]
+DelReg = libusb_del_reg_hw
+AddReg = libusb_add_reg_hw
+
+[LIBUSB_WIN32_DEV.NT.Services]
+AddService = libusb0, 0x00000002, libusb_add_service
+
+[LIBUSB_WIN32_DEV.NTAMD64.Services]
+AddService = libusb0, 0x00000002, libusb_add_service
+
+; Older versions of this .inf file installed filter drivers. They are not
+; needed any more and must be removed
+[libusb_del_reg_hw]
+HKR,,LowerFilters
+HKR,,UpperFilters
+
+; libusb-win32 device properties
+[libusb_add_reg_hw]
+HKR,,SurpriseRemovalOK,0x00010001,1
+
+; (Optional) the usb configuration value to select when this device
+; is started.  If this key does not exist the first config is selected.
+;HKR,,InitialConfigValue,0x00010001,<your config value>
+
+;--------------------------------------------------------------------------
+; libusb-win32 service
+;--------------------------------------------------------------------------
+
+[libusb_add_service]
+DisplayName   = "libusb-win32 - Kernel Driver 01/17/2012 1.2.6.0"
+ServiceType   = 1
+StartType     = 3
+ErrorControl  = 0
+ServiceBinary = %12%\libusb0.sys
+
+;--------------------------------------------------------------------------
+; libusb-win32 devices
+;--------------------------------------------------------------------------
+
+; Hardware IDs in a 'Devices' section can be installed by libusb-win32
+; using usb_install_driver_np(), usb_install_driver_np_rundll(), or the
+; inf-wizard utility.
+;
+"""
+
+def win32_inf(bsp_table, outfile):
+    """ Generate a Windows-style INF """
+
+    ## Write out the basic header.
+    outfile.write(WIN32_1)
+
+    # Make the BSP string variable (e.g., %MX25%)
+    bsp_list = [("%{0}%".format(bsp_name.upper()), info)
+                for bsp_name, info in bsp_table.items()]
+
+    # Use the BSP description for the device driver string.
+    for bsp_name, info in bsp_list:
+        outfile.write("{0} = \"{1}\"\n".format(bsp_name, info.description))
+    outfile.write("\n")
+
+    ## Write out more of the fixed information.
+    outfile.write(WIN32_2)
+
+    # For each supported architecture, create entries for each BSP:
+    #   Devices
+    #   Devices.NT
+    #   Devices.NTAMD64
+    for arch in ("", ".NT", ".NTAMD64"):
+        outfile.write("[Devices{0}]\n".format(arch))
+        for bsp_name, info in bsp_list:
+            outfile.write("{0} = LIBUSB_WIN32_DEV{1}, USB\VID_{2:04X}&PID_{3:04X}\n".format(
+                bsp_name, arch, info.usb_vid, info.usb_pid
+            ))
+        outfile.write("\n")
+
+def udev_conf(bsp_table, outfile):
+    """ Debian-style udev configs. """
+    outfile.write("##udev config for PyATK+libusb.\n\n")
+
+    # Ubuntu/Mint assign normal users to "plugdev", so this should be an appropriate
+    # basic config.
+    for bsp_name, info in bsp_table.items():
+        outfile.write("# {0} - {1}\n".format(bsp_name, info.description))
+        outfile.write('ATTR{{idVendor}}=="{0:04x}", ATTR{{idProduct}}=="{1:04x}", '
+                      'MODE="0660", GROUP="plugdev"\n'.format(info.usb_vid, info.usb_pid))
+
+USB_INFO_FORMATS = {
+    "udev": udev_conf,
+    "wininf": win32_inf,
+    # TODO: other libusb-supported operating systems and distributions!
+}
+
+def main():
+    def errln(line):
+        sys.stderr.write(line + "\n")
+
+    def usage(list_formats=False):
+        errln("Usage: {0} [output_format] [bsp_config_file]".format(sys.argv[0]))
+
+        if list_formats:
+            errln("Available formats:")
+            for info_format in USB_INFO_FORMATS:
+                errln("  - {0}".format(info_format))
+
+        sys.exit(1)
+
+    if len(sys.argv) < 2:
+        errln("Missing output format name!")
+        usage(list_formats=True)
+
+    if len(sys.argv) < 3:
+        errln("Missing BSP input configuration file!")
+        usage()
+
+    output_format = sys.argv[1]
+    bsp_config = sys.argv[2]
+
+    # Load the BSP table.
+    bsp_table = load_board_support_table([bsp_config])
+
+    try:
+        usb_info_handler = USB_INFO_FORMATS[output_format]
+        usb_info_handler(bsp_table, sys.stdout)
+
+    except KeyError:
+        errln("Unknown format {0!r}!".format(output_format))
+        usage(list_formats=True)
+
+if __name__ == "__main__":
+    main()
