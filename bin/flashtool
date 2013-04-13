@@ -123,15 +123,31 @@ class ToolkitApplication(object):
         # is reset (either via loading an application
         # or resetting the CPU back into SBP mode), the interface
         # takes some time to reset and be recognized by the host
-        # OS.  3 seconds empirically works for me on Linux with libusb.
+        # OS.
+        # 
+        # This takes longer when USB passthrough is used
+        # for virtual machines, thus we attempt to re-connect
+        # multiple times with a short timeout.
         #
         # It would be nice if we could wait for OS hotplug events,
         # but that's not possible with libusb (maybe libusbx?)
         # and it's not really worth the effort IMHO.
         if self._usb:
             self.channel.close()
-            time.sleep(3)
-            self.channel.open()
+            
+            attempts = 0
+            while attempts < 3:
+                time.sleep(3)
+                try:
+                    self.channel.open()
+                    break
+
+                except IOError, err:
+                    #writeln("Attempt {0} to re-open channel failed: {1}".format(attempts, err))
+                    attempts += 1
+            
+            if attempts == 3:
+                raise ToolkitError("unable to re-open USB channel! Is the device connected?")
 
     def run(self):
         writeln("Selected BSP %r." % self.options.bsp_name)
