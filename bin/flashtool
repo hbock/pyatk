@@ -86,12 +86,6 @@ class ToolkitApplication(object):
 
         self.bsp_info = bsp_table[options.bsp_name]
 
-        # Some care is needed for USB enumeration timing.
-        self._usb = (options.usb_vid_pid is not None)
-
-        vid = None
-        pid = None
-
         # VID/PID specified explicitly
         if options.usb_vid_pid:
             try:
@@ -116,6 +110,7 @@ class ToolkitApplication(object):
             self.channel = UARTChannel(options.serialport)
         else:
             self.channel = USBChannel(idVendor = vid, idProduct = pid)
+            self._usb = True
 
         self.options = options
         self.sbp = boot.SerialBootProtocol(self.channel)
