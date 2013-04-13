@@ -443,6 +443,13 @@ class RAMKernelProtocol(object):
         The maximum size of ``data`` is :const:`FLASH_PROGRAM_MAX_WRITE_SIZE`;
         break your write operation into multiple calls to this method.
 
+        This method assumes that ``start_address`` lies at the beginning of a
+        flash block.  The stock i.MX RAM kernel automatically erases the
+        block to be programmed before writing, and always writes ``data``
+        from the **first page** in the block - regardless of your ``start_address``!
+        Beware of this limitation; you cannot simply start writing anywhere within
+        the flash block.
+
         If ``read_back_verify`` is ``True``, the flash region to be programmed
         is read back for verification.
 
