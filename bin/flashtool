@@ -142,7 +142,7 @@ class ToolkitApplication(object):
                     self.channel.open()
                     break
 
-                except IOError, err:
+                except IOError as err:
                     #writeln("Attempt {0} to re-open channel failed: {1}".format(attempts, err))
                     attempts += 1
             
@@ -322,18 +322,27 @@ class ToolkitApplication(object):
                 self.verify_current += verify_length
 
         data_size = os.stat(path).st_size
-        #def erase_cb(block, length):
-        #    writeln("Erased block %d, length %d" % (block, length))
-
         num_blocks = data_size / block_size
-        writeln("Erasing address %d, %d bytes (%d blocks)" % (start_address, data_size, num_blocks))
-        self.ramkernel.flash_set_bbt(True)
-        self.ramkernel.flash_erase(start_address, data_size)
+        # flash_program will only write starting at the block boundary.
+        # The RAM kernel will pretend it is writing to the specified address,
+        # but it always erases and then writes starting from block page 0.
+        # Thus, we pad the data if the start address starts after the first
+        # byte of the block.
+        block_start = (start_address & ~(block_size-1))
+        if block_start < start_address:
+            initial_pad = "\x00" * (start_address - block_start)
+            writeln("Flash program start address does not fall on block boundary.")
+            writeln("Writing {0} pad bytes at start of block.".format(len(initial_pad)))
+        else:
+            initial_pad = ""
 
         with open(path, "rb") as file_fp:
             read_size = block_size
-            current_address = start_address
-            chunk = file_fp.read(read_size)
+            # Start writing at block start address
+            current_address = block_start
+            # Pad the first read from the file, adjusted for the remaining size of the
+            # block.
+            chunk = initial_pad + file_fp.read(read_size - len(initial_pad))
 
             prog = Progress()
             while current_address < (start_address + data_size):
