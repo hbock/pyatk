@@ -416,7 +416,23 @@ def read_initialization_file(filename):
         return initialization_data
 
 def main():
-    parser = OptionParser("%prog -s DEVICE [-k ramkernel] [-i init.txt] [application]")
+    parser = OptionParser(
+        "i.MX Serial Bootloader / Flash Toolkit\n\n"
+
+        "Flashing a program via a RAM kernel to the start of flash:\n"
+        "  %prog -b PLAT_BSP -i init.txt -k ramkernel.bin --flash-file BOARD.ROM --flash-address 0\n\n"
+
+        "Executing an application (u-boot.bin) compiled to start at 0x82000000:\n"
+        "  %prog -b PLAT_BSP -i init.txt -f u-boot.bin -a 0x82000000\n\n"
+
+        "Dumping 2 kB of flash memory starting at address 0x00000000:\n"
+        "  %prog -b PLAT_BSP -i init.txt -k ramkernel.bin --flash-dump 2048 --flash-address 0\n\n"
+
+        "Manually specify USB VID/PID (PID is optional):\n"
+        "  %prog -b PLAT_BSP -uVID[:PID] ...\n"
+        "Or serial port (COMx on Windows, /dev/ttyusbX on Linux, etc.):\n"
+        "  %prog -b PLAT_BSP -s COM1 ..."
+    )
     parser.add_option("--bsp", "-b", action = "store",
                       dest = "bsp_name", metavar = "PLATFORM",
                       help = "Platform BSP name (e.g., mx25)")
