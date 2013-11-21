@@ -1,6 +1,6 @@
 import unittest
 
-from pyatk.channel.mock import MockChannel
+from pyatk.tests.mockchannel import MockChannel
 from pyatk import ramkernel
 
 class RAMKernelTests(unittest.TestCase):

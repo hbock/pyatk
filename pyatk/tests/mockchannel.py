@@ -37,6 +37,9 @@ class MockChannel(ATKChannelI):
         # Buffered data to be sent to the calling host.
         self.send_queue = collections.deque()
 
+    def get_data_written(self):
+        return b"".join(self.recv_data)
+
     def queue_data(self, data):
         self.send_queue.append(data)
 
