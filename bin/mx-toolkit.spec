@@ -1,5 +1,5 @@
 # -*- mode: python -*-
-a = Analysis(['mx-flashtool.py'],
+a = Analysis(['mx-toolkit.py'],
              pathex=['.'],
              hiddenimports=[],
              hookspath=None,
@@ -9,7 +9,7 @@ pyz = PYZ(a.pure)
 exe = EXE(pyz,
           a.scripts,
           exclude_binaries=True,
-          name='mx-flashtool.exe',
+          name='mx-toolkit.exe',
           debug=False,
           strip=None,
           upx=True,
@@ -20,4 +20,4 @@ coll = COLLECT(exe,
                a.datas,
                strip=None,
                upx=True,
-               name='mx-flashtool')
+               name='mx-toolkit')

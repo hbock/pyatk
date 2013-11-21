@@ -13,7 +13,7 @@ setup(
         'pyatk.tests',
     ],
     test_suite='pyatk.tests',
-    scripts=['bin/mx-flashtool.py'],
+    scripts=['bin/mx-toolkit.py'],
     install_requires=[
         'pyserial >= 2.6',
         'pyusb >= 1.0.0b1',
