@@ -239,6 +239,14 @@ class ToolkitApplication(object):
                            default = -1,
                            help = ("RAM kernel helper application origin address "
                                    "(default to BSP definition)."))
+        rkgroup.add_option("--dump-file", "-f", action = "store",
+                           dest = "flash_dump_file", metavar = "FILE",
+                           default = "dump.bin",
+                           help = ("File to write to for 'flash dump' command. Default "
+                                   "is 'dump.bin'"))
+        rkgroup.add_option("--no-print", "-n", action = "store_false",
+                           dest = "print_flash_dump", default = True,
+                           help = "Set this flag to disable dumping flash to the console.")
 
         parser.add_option_group(rkgroup)
 
@@ -329,7 +337,7 @@ class ToolkitApplication(object):
         kernel = ramkernel.RAMKernelProtocol(self.channel)
 
         if options.ram_kernel_file:
-            writeln("Using RAM kernel binary from command line.")
+            writeln(" [-] Using RAM kernel binary from command line.")
             rk_file = options.ram_kernel_file
 
         elif self.bsp_info.ram_kernel_file:
@@ -417,18 +425,20 @@ class ToolkitApplication(object):
             except ValueError:
                 raise ToolkitError("Invalid flash address %r!" % (address,))
         else:
-            writeln(" Start address not specified; starting at block 0.")
+            writeln(" [*] Start address not specified; starting at block 0.")
             start_address = 0
 
-        writeln("Dumping flash @ 0x%08x, count %d" % (start_address, count))
-        writeln("Also dumping to dump.bin...")
-        with open("dump.bin", "wb") as dump_fp:
+        writeln(" [*] Dumping flash @ 0x%08x, count %d" % (start_address, count))
+        writeln(" [*] Also dumping to %s..." % (options.flash_dump_file,))
+        with open(options.flash_dump_file, "wb") as dump_fp:
             address = start_address
             while address < (start_address + count):
                 data = kernel.flash_dump(address, page_size)
-                print_hex_dump(data, address)
+                # Only dump to console if requested
+                if options.print_flash_dump:
+                    print_hex_dump(data, address)
+                # Write out data
                 dump_fp.write(data)
-
                 address += page_size
 
     def ram_kernel_flash_file(self, kernel, options, args):
@@ -441,10 +451,10 @@ class ToolkitApplication(object):
             except ValueError:
                 raise ToolkitError("Invalid flash address %r!" % (address,))
         else:
-            writeln(" Start address not specified; starting at block 0.")
+            writeln(" [*] Start address not specified; starting at block 0.")
             start_address = 0
 
-        writeln("Programming %r to 0x%08x" % (path, start_address))
+        writeln(" [*] Programming %r to 0x%08x" % (path, start_address))
         block_size = 0x20000
 
         current_address = 0
@@ -489,8 +499,9 @@ class ToolkitApplication(object):
         block_start = (start_address & ~(block_size-1))
         if block_start < start_address:
             initial_pad = "\x00" * (start_address - block_start)
-            writeln("Flash program start address does not fall on block boundary.")
-            writeln("Writing {0} pad bytes at start of block.".format(len(initial_pad)))
+            writeln(" [!] Flash program start address does not fall on block boundary.")
+            writeln(" [!] Writing {0} pad bytes at start of block.".format(len(initial_pad)))
+
         else:
             initial_pad = ""
 
