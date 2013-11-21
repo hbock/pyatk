@@ -23,8 +23,8 @@ i.MX processors, the author does not have access to these chips
 and cannot test them.
 
 You are welcome to provide the project maintainer(s) with test
-devices to "guarantee" support for your particular PDK. As always,
-if you have devices you can test and can add support yourself,
+devices to provide or fix support for your particular PDK. As
+always, if you have devices you can test and can add support yourself,
 patches are welcome!
 
 Serial Boot Protocol
@@ -54,13 +54,14 @@ MMC, NOR, or NAND, the ATK uses the concept of the "RAM Kernel" to
 abstract away device flash operation.
 
 The ATK source code contains a RAM kernel that can be extended for
-your design's flash chip (using the NFC or WEIM interfaces).  The ATK
+your design's flash chip (NAND, MMC, eSDHC, etc.).  The ATK
 program loads and executes this kernel in SDRAM, exposing the RAM
 kernel protocol for unified flash identification, erase, programming,
 etc.
 
-The pyATK implementation supports the protocol exposed by the RAM
-kernel, but does not provide any implementation of the kernel itself.
+The pyATK implementation supports the protocol exposed by Freescale's
+default RAM kernel implementation, but does not provide any
+implementation of the kernel itself.
 If your design has a custom NAND flash chip unknown to the stock ATK
 RAM kernels, you must compile your own using the source code provided
 on the Freescale website.  Freescale provides an excellent manual for
