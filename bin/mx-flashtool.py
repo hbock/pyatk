@@ -80,11 +80,11 @@ class ToolkitApplication(object):
 
         try:
             # TODO: look in home directory too!
-            bsp_table = bspinfo.load_board_support_table([bsp_table_path])
+            self.bsp_table = bspinfo.load_board_support_table([bsp_table_path])
         except IOError as e:
             raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
 
-        self.bsp_info = bsp_table[options.bsp_name]
+        self.bsp_info = self.bsp_table[options.bsp_name]
 
         # VID/PID specified explicitly
         if options.usb_vid_pid:
@@ -150,6 +150,16 @@ class ToolkitApplication(object):
                 raise ToolkitError("unable to re-open USB channel! Is the device connected?")
 
     def run(self):
+        if self.options.list_bsp:
+            writeln("Listing BSP data:")
+            writeln("-----------------")
+            for bsp_name in self.bsp_table:
+                bsp_data = self.bsp_table[bsp_name]
+                writeln(" [*] %-10s -- %s" % (bsp_name, bsp_data.description))
+
+            sys.exit(0)
+        ## TODO restructure this so I don't need to, well, kill the app here.
+
         writeln("Selected BSP %r." % self.options.bsp_name)
         writeln("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
                                                  self.bsp_info.memory_bottom_address))
@@ -436,6 +446,9 @@ def main():
     parser.add_option("--bsp", "-b", action = "store",
                       dest = "bsp_name", metavar = "PLATFORM",
                       help = "Platform BSP name (e.g., mx25)")
+    parser.add_option("--list-bsp", "-l", action = "store_true",
+                      dest = "list_bsp",
+                      help = "List available BSP names to use with -b/--bsp")
     parser.add_option("--initialization-file", "-i", action = "store",
                       dest = "init_file", metavar = "FILE",
                       help = "Memory initialization file.")
@@ -488,8 +501,9 @@ def main():
     
     options, args = parser.parse_args()
 
-    if not options.bsp_name:
-        parser.error("Please select a BSP name.")
+    if not (options.list_bsp or options.bsp_name):
+        parser.error("Please select a BSP name, or run with --list-bsp to see available BSPs.")
+
     if options.serialport and options.usb_vid_pid:
         parser.error("Cannot select both a serial port and a USB device!")
 
