@@ -132,7 +132,13 @@ class ToolkitApplication(object):
         self.sbp = boot.SerialBootProtocol(self.channel)
 
         writeln(" [*] Opening bootstrap communications channel...")
-        self.channel.open()
+        try:
+            self.channel.open()
+        except IOError as err:
+            writeln(" <!> Failed to open communications channel!")
+            writeln(" <!> %s" % (err,))
+            sys.exit(1)
+
         status = self.sbp.get_status()
         writeln(" [*] Initial boot status: %s" % boot.get_status_string(status))
 
@@ -401,6 +407,9 @@ class ToolkitApplication(object):
 
         except ramkernel.CommandResponseError as err:
             writeln(" <!> RAM kernel error: %s" % (err,))
+
+        except Exception as err:
+            writeln(" <!> Unhandled error: %s" % (err,))
 
         finally:
             writeln(" [*] Resetting CPU...")
