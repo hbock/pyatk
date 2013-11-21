@@ -28,6 +28,7 @@ Portable Python command-line tool for bootstrapping i.MX processors.
 import os
 import sys
 import time
+import traceback
 from optparse import OptionParser, OptionGroup
 
 from pyatk.channel.uart import UARTChannel
@@ -37,7 +38,7 @@ from pyatk import ramkernel
 from pyatk import bspinfo
 from pyatk import __version__ as pyatk_version
 
-MX_FLASHTOOL_VERSION = "0.0.1"
+MX_FLASHTOOL_VERSION = "0.0.2"
 
 def writeln(line = ""):
     """
@@ -78,13 +79,30 @@ class ToolkitError(Exception):
         return self.msg
 
 class ToolkitApplication(object):
-    def __init__(self, bsp_table, options):
+    def __init__(self):
+        self.bsp_info = None
+        self.channel = None
+        self.sbp = None
+
+    def bsp_initialize(self, options, require_bsp = True):
+        bsp_table = get_bsp_table(options)
+        if require_bsp and not options.bsp_name:
+            raise ToolkitError("Please select a BSP name, or run command 'listbsp' to see "
+                               "available BSPs.")
+
+
         try:
             self.bsp_info = bsp_table[options.bsp_name]
 
         except KeyError:
-            writeln("Unable to find requested BSP name %r!" % (options.bsp_name,))
-            sys.exit(1)
+            if require_bsp:
+                raise ToolkitError("Unable to find requested BSP name %r!" % (options.bsp_name,))
+
+        return bsp_table
+
+    def channel_init(self, options):
+        if options.serialport and options.usb_vid_pid:
+            raise ToolkitError("Cannot select both a serial port and a USB device!")
 
         # VID/PID specified explicitly
         if options.usb_vid_pid:
@@ -105,17 +123,21 @@ class ToolkitApplication(object):
             vid = self.bsp_info.usb_vid
             pid = self.bsp_info.usb_pid
 
-
         if options.serialport:
             self.channel = UARTChannel(options.serialport)
         else:
             self.channel = USBChannel(idVendor = vid, idProduct = pid)
             self._usb = True
 
-        self.options = options
         self.sbp = boot.SerialBootProtocol(self.channel)
-        self.ramkernel = ramkernel.RAMKernelProtocol(self.channel)
-        self.mem_init_data = []
+
+        writeln(" [*] Opening bootstrap communications channel...")
+        self.channel.open()
+        status = self.sbp.get_status()
+        writeln(" [*] Initial boot status: %s" % boot.get_status_string(status))
+
+        self.mem_initialize(options)
+        self.mem_test()
 
     def channel_reinit(self):
         """ Close and re-open the ATK channel. """
@@ -133,6 +155,7 @@ class ToolkitApplication(object):
         # but that's not possible with libusb (maybe libusbx?)
         # and it's not really worth the effort IMHO.
         if self._usb:
+            writeln(" [*] Re-initialize USB channel.")
             self.channel.close()
             
             attempts = 0
@@ -147,144 +170,279 @@ class ToolkitApplication(object):
                     attempts += 1
             
             if attempts == 3:
-                raise ToolkitError("unable to re-open USB channel! Is the device connected?")
+                raise IOError("unable to re-open USB channel! Is the device connected?")
 
-    def run(self):
-        writeln("Selected BSP %r." % self.options.bsp_name)
-        writeln("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
-                                                 self.bsp_info.memory_bottom_address))
+    def get_base_parser(self, command_specific_help = ""):
+        parser = OptionParser(
+            "i.MX Flash Toolkit version " + MX_FLASHTOOL_VERSION +
+            " (API version " + pyatk_version +
+            ")\n\n" + command_specific_help,
+            version=MX_FLASHTOOL_VERSION
+        )
+        group = OptionGroup(parser, "Board Support Package (BSP) Configuration")
+        group.add_option("--bsp", "-b", action = "store",
+                         dest = "bsp_name", metavar = "PLATFORM",
+                         help = "Platform BSP name (e.g., mx25)")
+        group.add_option("--bsp-config", "-c", action = "store",
+                         dest = "bsp_config_file", metavar = "CONFIGFILE",
+                         default = os.path.join(os.getcwd(), "bspinfo.conf"),
+                         help = "Optional BSP config file (defaults to $(PWD)/bspinfo.conf)")
+        parser.add_option_group(group)
 
-        self.load_mem_initializer()
+        parser.add_option("--initialization-file", "-i", action = "store",
+                          dest = "init_file", metavar = "FILE",
+                          help = "Memory initialization file.")
+
+        comgroup = OptionGroup(parser, "Communications")
+        comgroup.add_option("--serialport", "-s", action = "store",
+                            dest = "serialport", metavar = "DEVICE",
+                            help = "Use serial port DEVICE instead of USB.")
+        comgroup.add_option("--usb", "-u", action = "store",
+                            dest = "usb_vid_pid", metavar = "VID[:PID]",
+                            help = "Override USB vendor ID/product ID in BSP data.")
+
+        parser.add_option_group(comgroup)
+
+        return parser
+
+    def run_list_bsp(self, args):
+        parser = self.get_base_parser()
+        options, args = parser.parse_args(args)
+        bsp_table = self.bsp_initialize(options, require_bsp=False)
+
+        writeln("Listing BSP data:")
+        writeln("-----------------")
+        for bsp_name in bsp_table:
+            bsp_data = bsp_table[bsp_name]
+            writeln(" [*] %-10s -- %s" % (bsp_name, bsp_data.description))
+
+    def run_flash(self, args):
+        #
+        # "Manually specify USB VID/PID (PID is optional):\n"
+        # "  %prog -b PLAT_BSP -uVID[:PID] ...\n"
+        # "Or serial port (COMx on Windows, /dev/ttyusbX on Linux, etc.):\n"
+        # "  %prog -b PLAT_BSP -s COM1 ...",
+
+        parser = self.get_base_parser(
+            "Flashing a program via a RAM kernel to the start of flash (0x0):\n"
+            "  %prog flash program -b PLAT_BSP BOARD.ROM 0x0\n\n"
+            "Dumping 2 kB of flash memory starting at address 0x00000000:\n"
+            "  %prog flash dump -b PLAT_BSP 2048 0x0"
+        )
+
+        rkgroup = OptionGroup(parser, "Flash Command Options")
+        rkgroup.add_option("--ram-kernel", "-k", action = "store",
+                           dest = "ram_kernel_file", metavar = "FILE",
+                           help = "RAM kernel helper application binary.")
+        rkgroup.add_option("--ram-kernel-address", "-a", action = "store",
+                           dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
+                           default = -1,
+                           help = ("RAM kernel helper application origin address "
+                                   "(default to BSP definition)."))
+
+        parser.add_option_group(rkgroup)
+
+        options, args = parser.parse_args(args)
+        self.bsp_initialize(options)
+        self.channel_init(options)
+        self.run_ram_kernel(options, args)
+
+    def run_run(self, args):
+        parser = self.get_base_parser(
+            "Executing an application (u-boot.bin) compiled to start at 0x82000000:\n"
+            "  %prog run -b PLAT_BSP u-boot.bin 0x82000000"
+        )
+        options, args = parser.parse_args(args)
+
+        application_file = args[0]
         try:
-            self.channel.open()
-            status = self.sbp.get_status()
-            writeln("Boot status: %s" % boot.get_status_string(status))
-            
-            self.memtest()
-            self.mem_initialize()
+            load_address = int(args[1], 0)
 
-            if self.options.ram_kernel_file is not None:
-                self.run_ram_kernel()
+        except ValueError:
+            raise ToolkitError("Invalid flash address %r!" % (args[1],))
 
-            elif self.options.application_file is not None:
-                self.run_application(self.options.application_file, self.options.application_address)
+        self.bsp_initialize(options)
+        self.channel_init(options)
+        self.run_application(application_file, load_address)
 
-            if self.options.read_forever:
-                writeln("Continuously reading from channel. Press Ctrl-C to exit.")
-                writeln()
+    def run(self, command, args):
+        command_map = {
+            "flash": self.run_flash,
+            "listbsp": self.run_list_bsp,
+            "run": self.run_run,
+        }
+        if command.lower() not in command_map:
+            raise ToolkitError("Invalid command %r!" % (command,))
 
-                while True:
-                    data = self.channel.read(10)
-                    if data != "":
-                        sys.stdout.write(data)
-                        sys.stdout.flush()
+        # Strip off the initial command
+        command_map[command](args)
 
-        except boot.CommandResponseError as exc:
-            writeln("Command response error: %s" % exc)
-            sys.exit(1)
+        # except boot.CommandResponseError as exc:
+        #     writeln("Command response error: %s" % exc)
+        #     sys.exit(1)
+        #
+        # finally:
+        #     if self.channel:
+        #         self.channel.close()
 
-        finally:
-            if self.channel:
-                self.channel.close()
-
-    def load_mem_initializer(self):
-        if self.options.init_file:
-            self.mem_init_data = read_initialization_file(self.options.init_file)
-        elif self.options.ram_kernel_file:
-            raise ToolkitError("RAM kernel selected, but initialization file missing.")
-        
     def load_application(self, application_file, application_address):
         pass
 
-    def memtest(self):
+    def mem_test(self):
+        writeln(" [i] Memory test...")
         # Initial memory test
-        self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
-        check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
+        memory_test_addr = self.bsp_info.base_memory_address
+        self.sbp.write_memory(memory_test_addr, boot.DATA_SIZE_WORD, 0xBEEFDEAD)
+        check = self.sbp.read_memory_single(memory_test_addr, boot.DATA_SIZE_WORD)
         if 0xBEEFDEAD != check:
-            writeln("ERROR: SRAM write check failed: got 0x%08X" % check)
+            writeln("ERROR: Memory write check failed: got 0x%08X" % check)
 
-        self.sbp.write_memory(0x78001000, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
-        check = self.sbp.read_memory_single(0x78001000, boot.DATA_SIZE_WORD)
+        memory_test_addr += 0x1000
+        self.sbp.write_memory(memory_test_addr, boot.DATA_SIZE_WORD, 0xBEEFCAFE)
+        check = self.sbp.read_memory_single(memory_test_addr, boot.DATA_SIZE_WORD)
         if 0xBEEFCAFE != check:            
             writeln("ERROR: SRAM write check failed: got 0x%08X" % check)
 
-    def mem_initialize(self):
-        for initaddr, initval, initwidth in self.mem_init_data:
-            writeln("init: write 0x%08X to 0x%08X (width %d)" % (initval, initaddr, initwidth))
-            self.sbp.write_memory(initaddr, initwidth, initval)
+    def mem_initialize(self, options):
+        init_file = None
+        # If the -i option is specified, use that over the BSP file.
+        if options.init_file:
+            init_file = options.init_file
 
-    def run_ram_kernel(self):
-        rk_file = self.options.ram_kernel_file
-        rk_addr = self.options.ram_kernel_address
+        # If the -i option is NOT specified, see if there is a BSP file.
+        elif self.bsp_info.memory_init_file:
+            init_file = self.bsp_info.memory_init_file
+
+        if init_file is not None:
+            mem_init_data = read_initialization_file(init_file)
+            writeln(" [*] Initializing processor memory...")
+            for initaddr, initval, initwidth in mem_init_data:
+                if boot.DATA_SIZE_WORD == initwidth:
+                    writeln("  [>] Write 0x%08X to 0x%08X" % (initval, initaddr))
+                if boot.DATA_SIZE_HALFWORD == initwidth:
+                    writeln("  [>] Write 0x%04X to 0x%08X" % (initval, initaddr))
+                if boot.DATA_SIZE_BYTE == initwidth:
+                    writeln("  [>] Write 0x%02X to 0x%08X" % (initval, initaddr))
+                self.sbp.write_memory(initaddr, initwidth, initval)
+
+    def run_ram_kernel(self, options, args):
+        kernel = ramkernel.RAMKernelProtocol(self.channel)
+
+        if options.ram_kernel_file:
+            writeln("Using RAM kernel binary from command line.")
+            rk_file = options.ram_kernel_file
+
+        elif self.bsp_info.ram_kernel_file:
+            rk_file = self.bsp_info.ram_kernel_file
+            writeln(" [-] Using RAM kernel binary from BSP configuration.")
+            writeln(" [-]   %s" % (rk_file,))
+
+        else:
+            raise ToolkitError("No RAM kernel file specified.")
+
+        rk_addr = options.ram_kernel_address
+
         if rk_addr == -1:
             rk_addr = self.bsp_info.ram_kernel_origin
-            writeln("RAM kernel origin not specified; using BSP value 0x%08X" % rk_addr)
+            writeln(" [-]   Kernel origin not specified; using BSP value 0x%08X" % rk_addr)
         else:
-            writeln("Using user-specified RAM kernel origin: 0x%08X" % rk_addr)
+            writeln(" [-]   Using user-specified kernel origin: 0x%08X" % rk_addr)
+
+
+        try:
+            flash_command = args[0]
+            if "test" == flash_command:
+                flash_run_method = self.ram_kernel_flash_test
+            elif "program" == flash_command:
+                flash_run_method = self.ram_kernel_flash_file
+            elif "dump" == flash_command:
+                flash_run_method = self.ram_kernel_flash_dump
+            else:
+                raise ToolkitError("Unknown 'flash' subcommand %r!" % (flash_command,))
+
+        except IndexError:
+            raise ToolkitError("Missing subcommand for 'flash' command!")
 
         def load_cb(current, total):
             bar_len = 50
             bar_on = int(float(current) / total * bar_len)
             bar_off = bar_len - bar_on
-            sys.stdout.write("[%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
+            sys.stdout.write("     [%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
             sys.stdout.flush()
 
         # Load and run the RAM kernel image.
-        self.ramkernel.run_image_from_file(rk_file, self.bsp_info, load_cb)
+        writeln(" [*] Loading and executing RAM kernel...")
+        kernel.run_image_from_file(rk_file, self.bsp_info, load_cb)
         writeln()
 
         # Re-open channel
         self.channel_reinit()
 
-        writeln("RAM kernel initialize flash.")
-        self.ramkernel.flash_initial()
-        writeln("RAM kernel getver():")
-        imxtype, flashmodel = self.ramkernel.getver()
-        writeln("Part number = 0x%04X (flash model = %r)" % (imxtype, flashmodel))
-        writeln("RAM kernel flash capacity: %u Mb" % (self.ramkernel.flash_get_capacity() * 8 / 1024))
-
         try:
-            if self.options.rkl_flash_test:
-                self.ram_kernel_flash_test()
-            elif self.options.rkl_flash_file:
-                self.ram_kernel_flash_file(self.options.rkl_flash_file, self.options.rkl_flash_start_address)
-            elif self.options.rkl_flash_dump:
-                self.ram_kernel_dump(self.options.rkl_flash_start_address, self.options.rkl_flash_dump)
+            writeln(" [*] RAM kernel initialize flash.")
+            kernel.flash_initial()
+            writeln(" [?] Querying RAM kernel for version information:")
+            imxtype, flashmodel = kernel.getver()
+            writeln("    [>] Part number = 0x%04X" % (imxtype,))
+            writeln("    [>] Flash model = %r" % (flashmodel,))
 
-        except Exception as e:
-            writeln("Unhandled exception: %s" % e)
-            raise
+            flash_capacity_mbits = kernel.flash_get_capacity() * 8 / 1024
+            writeln("    [>]  RAM kernel flash capacity: %u Mb" % (flash_capacity_mbits,))
+
+            flash_run_method(kernel, options, args[1:])
+
+        except ramkernel.CommandResponseError as err:
+            writeln(" <!> RAM kernel error: %s" % (err,))
 
         finally:
-            writeln("\nEnd of RAM kernel test. Resetting CPU...")
-            self.ramkernel.reset()
+            writeln(" [*] Resetting CPU...")
+            kernel.reset()
             self.channel_reinit()
 
             # Allow channel/bootstrap to settle
             time.sleep(2)
 
-            writeln("SBP status after reset: " + boot.get_status_string(self.sbp.get_status()))
+            writeln(" [*] Bootstrap status after reset: %s" % (
+                boot.get_status_string(self.sbp.get_status()),
+            ))
 
-    def ram_kernel_dump(self, start_address, count, page_size = 2048):
+    def ram_kernel_flash_dump(self, kernel, options, args):
+        count = int(args[0], 0)
+        page_size = 2048
+
+        if len(args) > 1:
+            address = args[1]
+            try:
+                start_address = int(address, 0)
+            except ValueError:
+                raise ToolkitError("Invalid flash address %r!" % (address,))
+        else:
+            writeln(" Start address not specified; starting at block 0.")
+            start_address = 0
+
         writeln("Dumping flash @ 0x%08x, count %d" % (start_address, count))
         writeln("Also dumping to dump.bin...")
         with open("dump.bin", "wb") as dump_fp:
             address = start_address
             while address < (start_address + count):
-                data = self.ramkernel.flash_dump(address, page_size)
+                data = kernel.flash_dump(address, page_size)
                 print_hex_dump(data, address)
                 dump_fp.write(data)
 
                 address += page_size
 
-    def ram_kernel_flash_file(self, path, start_address):
-        ## FIXME this doesn't quite work yet... at least, I haven't gotten
-        ## it to boot on any BSP yet.  Dumping flash to file (--flash-dump)
-        ## and comparing against "path" show the files are binary identical.
-        ## It must be something to do with either the image I'm testing,
-        ## or not setting up the BBT.
-        if start_address is None:
-            raise ToolkitError("Flash start address not specified!")
+    def ram_kernel_flash_file(self, kernel, options, args):
+        path = args[0]
+
+        if len(args) > 1:
+            address = args[1]
+            try:
+                start_address = int(address, 0)
+            except ValueError:
+                raise ToolkitError("Invalid flash address %r!" % (address,))
+        else:
+            writeln(" Start address not specified; starting at block 0.")
+            start_address = 0
 
         writeln("Programming %r to 0x%08x" % (path, start_address))
         block_size = 0x20000
@@ -346,38 +504,36 @@ class ToolkitApplication(object):
 
             prog = Progress()
             while current_address < (start_address + data_size):
-                self.ramkernel.flash_program(current_address, chunk,
-                                             read_back_verify = True,
-                                             program_callback = prog.program_cb,
-                                             verify_callback  = prog.verify_cb)
+                kernel.flash_program(current_address, chunk,
+                                     read_back_verify = True,
+                                     program_callback = prog.program_cb,
+                                     verify_callback  = prog.verify_cb)
                 current_address += len(chunk)
                 chunk = file_fp.read(read_size)
 
-    def ram_kernel_flash_test(self):
-        writeln("Running RKL flash test.")
-        writeln("read flash first page:")
+    def ram_kernel_flash_test(self, kernel, options, args):
+        writeln(" [*] Running RKL flash test.")
+        writeln(" [*] Read flash first page:")
         start_address = 0x0000
-        flash_page = self.ramkernel.flash_dump(start_address, 1024)
+        flash_page = kernel.flash_dump(start_address, 1024)
         print_hex_dump(flash_page, start_address)
 
         def erase_cb(block_index, block_size):
-            writeln("Erased block %d (size %d bytes)." % (block_index, block_size))
+            writeln("   [>] Erased block %d (size %d bytes)." % (block_index, block_size))
 
         size = 4096 * 4
-        writeln("Erasing first %d bytes." % size)
-        self.ramkernel.flash_erase(start_address, size, erase_callback = erase_cb)
-        writeln("Dump after erase...")
-        flash_page = self.ramkernel.flash_dump(start_address, size)
+        writeln(" [*] Erasing first %d bytes." % size)
+        kernel.flash_erase(start_address, size, erase_callback = erase_cb)
+        writeln(" [*] Dump after erase...")
+        flash_page = kernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
-        writeln("Test flashing DEADBEEF to first page...")
-        self.ramkernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
-                                     read_back_verify = True,
-                                     program_callback = program_cb,
-                                     verify_callback  = verify_cb)
+        writeln(" [*] Test programming 0xDEADBEEF to first page...")
+        kernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
+                             read_back_verify = True)
 
-        writeln("Dump after program...")
-        flash_page = self.ramkernel.flash_dump(start_address, size)
+        writeln(" [*] Dump after program...")
+        flash_page = kernel.flash_dump(start_address, size)
         print_hex_dump(flash_page, start_address)
 
     def run_application(self, filename, load_address):
@@ -387,16 +543,17 @@ class ToolkitApplication(object):
             bar_len = 50
             bar_on = int(float(current) / total * bar_len)
             bar_off = bar_len - bar_on
-            sys.stdout.write("[%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
+            sys.stdout.write("   [%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
             sys.stdout.flush()
 
         with open(filename, "rb") as appl_fd:
-            writeln("Writing application %r to 0x%08X" % (filename, load_address))
+            writeln(" [*] Loading application %r to 0x%08X..." % (filename, load_address))
             self.sbp.write_file(boot.FILE_TYPE_APPLICATION,
                                 load_address, image_size, appl_fd, progress_callback = progcb)
+            writeln("\n [*] Application loaded; executing...")
             self.sbp.complete_boot()
 
-            writeln("\nApplication write/execute OK!")
+            writeln(" [*] Application write/execute OK!")
 
 def read_initialization_file(filename):
     with open(filename, "r") as initfp:
@@ -431,131 +588,44 @@ def get_bsp_table(options):
             bsp_table_search_list, err
         ))
 
-def list_bsp_table(bsp_table):
-    writeln("Listing BSP data:")
-    writeln("-----------------")
-    for bsp_name in bsp_table:
-        bsp_data = bsp_table[bsp_name]
-        writeln(" [*] %-10s -- %s" % (bsp_name, bsp_data.description))
-
 def main():
-    parser = OptionParser(
-        "i.MX Flash Toolkit version " + MX_FLASHTOOL_VERSION +
-        " (API version " + pyatk_version +
-        ")\n\n"
+    def usage(error = None):
+        sys.stderr.write("Usage: %s COMMAND [OPTIONS...]\n\n" % (sys.argv[0],))
+        sys.stderr.write("  COMMAND = flash program -b BSP FILE  [ADDRESS=0]\n"
+                         "            flash dump    -b BSP BYTES [ADDRESS=0]\n"
+                         "            flash erase   -b BSP BYTES [ADDRESS=0]\n"
+                         "            flash test    -b BSP\n"
+                         "            memtest       -b BSP\n"
+                         "            run -b BSP BINARY LOADADDR\n"
+                         "            listbsp\n\n")
 
-        "Flashing a program via a RAM kernel to the start of flash:\n"
-        "  %prog -b PLAT_BSP -i init.txt -k ramkernel.bin --flash-file BOARD.ROM --flash-address 0\n\n"
+        if error:
+            sys.stderr.write("Error: %s\n" % (error,))
 
-        "Executing an application (u-boot.bin) compiled to start at 0x82000000:\n"
-        "  %prog -b PLAT_BSP -i init.txt -f u-boot.bin -a 0x82000000\n\n"
-
-        "Dumping 2 kB of flash memory starting at address 0x00000000:\n"
-        "  %prog -b PLAT_BSP -i init.txt -k ramkernel.bin --flash-dump 2048 --flash-address 0\n\n"
-
-        "Manually specify USB VID/PID (PID is optional):\n"
-        "  %prog -b PLAT_BSP -uVID[:PID] ...\n"
-        "Or serial port (COMx on Windows, /dev/ttyusbX on Linux, etc.):\n"
-        "  %prog -b PLAT_BSP -s COM1 ...",
-        version=MX_FLASHTOOL_VERSION
-    )
-    group = OptionGroup(parser, "Board Support Package (BSP) Configuration")
-    group.add_option("--bsp", "-b", action = "store",
-                     dest = "bsp_name", metavar = "PLATFORM",
-                     help = "Platform BSP name (e.g., mx25)")
-    group.add_option("--bsp-list", "-l", action = "store_true",
-                     dest = "list_bsp",
-                     help = "List available BSP names to use with -b/--bsp")
-    group.add_option("--bsp-config", "-c", action = "store",
-                     dest = "bsp_config_file", metavar = "CONFIGFILE",
-                     default = os.path.join(os.getcwd(), "bspinfo.conf"),
-                     help = "Optional BSP config file (defaults to $(PWD)/bspinfo.conf)")
-    parser.add_option_group(group)
-
-    parser.add_option("--initialization-file", "-i", action = "store",
-                      dest = "init_file", metavar = "FILE",
-                      help = "Memory initialization file.")
-
-
-    group = OptionGroup(parser, "Application Load Options")
-    group.add_option("--appl-file", "-f", action = "store",
-                     dest = "application_file", metavar = "FILE",
-                     help = "Application binary.")
-    group.add_option("--appl-address", "-a", action = "store",
-                     dest = "application_address", type = "int", metavar = "ADDRESS",
-                     help = ("Application start address."))
-
-    parser.add_option_group(group)
-
-    rkgroup = OptionGroup(parser, "RAM Kernel Options")
-    rkgroup.add_option("--ram-kernel", "-k", action = "store",
-                       dest = "ram_kernel_file", metavar = "FILE",
-                       help = "RAM kernel helper application binary.")
-    rkgroup.add_option("--ram-kernel-address", action = "store",
-                       dest = "ram_kernel_address", type = "int", metavar = "ADDRESS",
-                       default = -1,
-                       help = ("RAM kernel helper application origin address "
-                               "(default to BSP definition)."))
-    rkgroup.add_option("--flash-test", "-t", action = "store_true",
-                       dest = "rkl_flash_test",
-                       help = "Test the flash part using the RAM kernel.",
-                       default = False)
-    rkgroup.add_option("--flash-dump", "-d", action = "store", type = "int",
-                       dest = "rkl_flash_dump", metavar = "COUNT",
-                       help = "Dump COUNT bytes of flash starting at --flash-address.")
-    rkgroup.add_option("--flash-file", action = "store",
-                       dest = "rkl_flash_file",
-                       metavar = "FILENAME",
-                       help = "Program this file to device flash memory.")
-    rkgroup.add_option("--flash-address", action = "store", type = "int",
-                       dest = "rkl_flash_start_address",
-                       metavar = "ADDRESS",
-                       help = "Starting writing to device flash memory at ADDRESS.")
-
-    comgroup = OptionGroup(parser, "Communications")
-    comgroup.add_option("--serialport", "-s", action = "store",
-                        dest = "serialport", metavar = "DEVICE",
-                        help = "Use serial port DEVICE instead of USB.")
-    comgroup.add_option("--usb", "-u", action = "store",
-                        dest = "usb_vid_pid", metavar = "VID[:PID]",
-                        help = "Override USB vendor ID/product ID in BSP data.")
-    comgroup.add_option("--read-forever", "-r", action = "store_true",
-                        dest = "read_forever", default = False,
-                        help  = ("Read continuously from communication channel after "
-                                 "loading application, displaying to terminal."))
-
-    parser.add_option_group(rkgroup)
-    parser.add_option_group(comgroup)
-    
-    options, args = parser.parse_args()
-
-    if not (options.list_bsp or options.bsp_name):
-        parser.error("Please select a BSP name, or run with --list-bsp to see available BSPs.")
-
-    if options.serialport and options.usb_vid_pid:
-        parser.error("Cannot select both a serial port and a USB device!")
-
-    if options.application_file and not options.application_address:
-        parser.error("Application file specified without address.")
-
-    bsp_table = get_bsp_table(options)
-    if options.list_bsp:
-        list_bsp_table(bsp_table)
-        sys.exit(0)
-
-    try:
-        atkprog = ToolkitApplication(bsp_table, options)
-        atkprog.run()
-
-    except KeyboardInterrupt:
-        writeln("User exit.")
         sys.exit(1)
 
-    except IOError as exc:
-        writeln("I/O error: %s" % exc)
+    try:
+        command = sys.argv[1]
+        if command.lower() in ("-h", "help", "/?"):
+            usage()
+
+        args    = sys.argv[2:]
+        atkprog = ToolkitApplication()
+        atkprog.run(command, args)
+
+    except boot.CommandResponseError as err:
+        writeln(" <!> Bootloader response error: %s" % (err,))
+
+    except IOError as err:
+        sys.stderr.write(" [!] I/O error : %s\n" % (err,))
+        traceback.print_tb(sys.exc_info()[2])
+        sys.exit(1)
+
+    except IndexError:
+        usage("Missing COMMAND option!")
 
     except ToolkitError as exc:
-        parser.error(str(exc))
+        usage(str(exc))
 
 if __name__ == "__main__":
     main()
