@@ -397,11 +397,11 @@ class ToolkitApplication(object):
             kernel.flash_initial()
             writeln(" [?] Querying RAM kernel for version information:")
             imxtype, flashmodel = kernel.getver()
-            writeln("    [>] Part number = 0x%04X" % (imxtype,))
-            writeln("    [>] Flash model = %r" % (flashmodel,))
+            writeln("    [>] Part number:    %u" % (imxtype,))
+            writeln("    [>] Flash model:    %r" % (flashmodel,))
 
             flash_capacity_mbits = kernel.flash_get_capacity() * 8 / 1024
-            writeln("    [>]  RAM kernel flash capacity: %u Mb" % (flash_capacity_mbits,))
+            writeln("    [>] Flash capacity: %u Mb" % (flash_capacity_mbits,))
 
             flash_run_method(kernel, options, args[1:])
 
