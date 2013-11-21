@@ -125,7 +125,7 @@ class SerialBootProtocolTests(unittest.TestCase):
     def test_complete_boot(self):
         """ Test the Completed command for the serial boot protocol. """
         self.queue_sbp_resp(boot.BOOT_PROTOCOL_COMPLETE)
-        self.assertEqual(boot.BOOT_PROTOCOL_COMPLETE, self.sbp.complete_boot())
+        self.assertEqual(boot.BOOT_PROTOCOL_COMPLETE, self.sbp._complete_boot())
 
         # Doesn't matter what was written, as long as it is 16 bytes!
         self.assertEqual(16, len(self.channel.get_data_written()))
@@ -133,7 +133,7 @@ class SerialBootProtocolTests(unittest.TestCase):
     def test_complete_boot_bad_response(self):
         """ Test the Completed command for the serial boot protocol. """
         self.queue_sbp_resp(boot.HAB_PASSED)
-        self.assertRaises(boot.CommandResponseError, self.sbp.complete_boot)
+        self.assertRaises(boot.CommandResponseError, self.sbp._complete_boot)
 
         # Doesn't matter what was written, as long as it is 16 bytes!
         self.assertEqual(16, len(self.channel.get_data_written()))

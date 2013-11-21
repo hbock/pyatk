@@ -272,12 +272,10 @@ class RAMKernelProtocol(object):
         sbp.write_memory(bsp_info.base_memory_address,
                          boot.DATA_SIZE_WORD,
                          self.channel.chantype)
-        # Load the kernel.
+        # Load and execute the kernel.
         sbp.write_file(boot.FILE_TYPE_APPLICATION,
                        bsp_info.ram_kernel_origin, image_size,
                        image_fp, progress_callback = load_cb)
-        # Done, pull the trigger and execute the RAM kernel.
-        sbp.complete_boot()
 
         # Now that we're done, don't allow this method to be
         # run again.

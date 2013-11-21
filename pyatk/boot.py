@@ -276,6 +276,22 @@ class SerialBootProtocol(object):
             if progress_callback:
                 progress_callback(bytes_consumed, length)
 
+        # If we are pushing an application (type 0xAA),
+        # we need to complete the boot process by
+        # sending 16 additional bytes of data.
+        # This is done in _complete_boot().
+        if FILE_TYPE_APPLICATION == filetype:
+            # HACK: The i.MX25 USB implementation does not
+            # like writing files that are multiples of 64 bytes!
+            # This will cause _complete_boot() to time out waiting
+            # for a response.  To fix this for now,
+            # push out one more byte before trying to read
+            # the damn status (which should be 0x88888888).
+            if 0 == (bytes_consumed % 64):
+                self.channel.write("\x00")
+
+            self._complete_boot()
+
     def reenumerate_usb(self, serialnum):
         """
         Force re-enumeration of USB PHY with serial number ``serialnum``
@@ -289,7 +305,7 @@ class SerialBootProtocol(object):
         if resp != b"\x89\x23\x23\x89":
             raise CommandResponseError("Invalid re-enumerate response: %r" % resp)
 
-    def complete_boot(self):
+    def _complete_boot(self):
         """
         This must be called immediately after calling :meth:`write_file` with file type
         :const:`FILE_TYPE_APPLICATION`.  This will execute the application starting
