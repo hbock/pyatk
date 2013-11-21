@@ -35,6 +35,9 @@ from pyatk.channel.usbdev import USBChannel
 from pyatk import boot
 from pyatk import ramkernel
 from pyatk import bspinfo
+from pyatk import __version__ as pyatk_version
+
+MX_FLASHTOOL_VERSION = "0.0.1"
 
 def writeln(line = ""):
     """
@@ -437,7 +440,9 @@ def list_bsp_table(bsp_table):
 
 def main():
     parser = OptionParser(
-        "i.MX Serial Bootloader / Flash Toolkit\n\n"
+        "i.MX Flash Toolkit version " + MX_FLASHTOOL_VERSION +
+        " (API version " + pyatk_version +
+        ")\n\n"
 
         "Flashing a program via a RAM kernel to the start of flash:\n"
         "  %prog -b PLAT_BSP -i init.txt -k ramkernel.bin --flash-file BOARD.ROM --flash-address 0\n\n"
@@ -451,7 +456,8 @@ def main():
         "Manually specify USB VID/PID (PID is optional):\n"
         "  %prog -b PLAT_BSP -uVID[:PID] ...\n"
         "Or serial port (COMx on Windows, /dev/ttyusbX on Linux, etc.):\n"
-        "  %prog -b PLAT_BSP -s COM1 ..."
+        "  %prog -b PLAT_BSP -s COM1 ...",
+        version=MX_FLASHTOOL_VERSION
     )
     group = OptionGroup(parser, "Board Support Package (BSP) Configuration")
     group.add_option("--bsp", "-b", action = "store",
