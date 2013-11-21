@@ -91,7 +91,16 @@ class CommandResponseError(Exception):
         return self.msg
 
 class SerialBootProtocol(object):
+    """
+    A protocol object for communicating with an i.MX processor
+    in serial bootloader mode.
+    """
     def __init__(self, channel, byteorder = 'little'):
+        """
+        Construct a serial bootloader protocol using data channel
+        ``channel`` and optionally specify the processor's ``byteorder``
+        (default is "little").
+        """
         self.channel = channel
         self.byteorder = byteorder
 
@@ -141,7 +150,8 @@ class SerialBootProtocol(object):
         addresses of width ``datasize``. Return an array of values read
         sequentially from memory.
 
-        All values are converted from device byte order to host byte order.
+        All values are converted from device byte order (specified
+        in the constructor) to host byte order, if necessary.
         """
         if datasize not in (DATA_SIZE_BYTE,
                             DATA_SIZE_HALFWORD,
@@ -237,6 +247,17 @@ class SerialBootProtocol(object):
                                        "of ACK: 0x%08X" % ack)
         
     def write_file(self, filetype, address, length, stream, progress_callback = None):
+        """
+        Write ``length`` bytes from the file-like object ``stream`` to the memory
+        starting at ``address``.  ``filetype`` must be specified and may be one of:
+
+        * :const:`FILE_TYPE_APPLICATION` -- a binary application to be executed
+        * :const:`FILE_TYPE_DCD` -- used in secure boot mode
+        * :const:`FILE_TYPE_CSF` -- used in secure boot mode
+
+        If ``filetype`` is :const:`FILE_TYPE_APPLICATION`, you must call
+        :meth:`complete_boot` to trigger execution.
+        """
         command = struct.pack(">HIxI4xB", CMD_WRITE_FILE, address, length, filetype)
         self._write_command(command)
         self._read_ack()
