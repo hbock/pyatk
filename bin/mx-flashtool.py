@@ -75,16 +75,13 @@ class ToolkitError(Exception):
         return self.msg
 
 class ToolkitApplication(object):
-    def __init__(self, options):
-        bsp_table_path = os.path.join(os.path.dirname(__file__), "bspinfo.conf")
-
+    def __init__(self, bsp_table, options):
         try:
-            # TODO: look in home directory too!
-            self.bsp_table = bspinfo.load_board_support_table([bsp_table_path])
-        except IOError as e:
-            raise ToolkitError("Unable to load BSP information table from %r: %s" % (bsp_table_path, e))
+            self.bsp_info = bsp_table[options.bsp_name]
 
-        self.bsp_info = self.bsp_table[options.bsp_name]
+        except KeyError:
+            writeln("Unable to find requested BSP name %r!" % (options.bsp_name,))
+            sys.exit(1)
 
         # VID/PID specified explicitly
         if options.usb_vid_pid:
@@ -150,16 +147,6 @@ class ToolkitApplication(object):
                 raise ToolkitError("unable to re-open USB channel! Is the device connected?")
 
     def run(self):
-        if self.options.list_bsp:
-            writeln("Listing BSP data:")
-            writeln("-----------------")
-            for bsp_name in self.bsp_table:
-                bsp_data = self.bsp_table[bsp_name]
-                writeln(" [*] %-10s -- %s" % (bsp_name, bsp_data.description))
-
-            sys.exit(0)
-        ## TODO restructure this so I don't need to, well, kill the app here.
-
         writeln("Selected BSP %r." % self.options.bsp_name)
         writeln("Memory range: 0x%08X - 0x%08X" % (self.bsp_info.base_memory_address,
                                                  self.bsp_info.memory_bottom_address))
@@ -425,6 +412,29 @@ def read_initialization_file(filename):
 
         return initialization_data
 
+def get_bsp_table(options):
+    """ Load BSP config files as necessary, returning the combined BSP table. """
+    bsp_table_search_list = [
+        os.path.join(os.path.expanduser("~"), ".pyatk", "bspinfo.conf"),
+        options.bsp_config_file,
+    ]
+
+    try:
+        return bspinfo.load_board_support_table(bsp_table_search_list)
+
+    except IOError as err:
+        raise ToolkitError("Unable to load BSP information table from "
+                           "search list %r: %s" % (
+            bsp_table_search_list, err
+        ))
+
+def list_bsp_table(bsp_table):
+    writeln("Listing BSP data:")
+    writeln("-----------------")
+    for bsp_name in bsp_table:
+        bsp_data = bsp_table[bsp_name]
+        writeln(" [*] %-10s -- %s" % (bsp_name, bsp_data.description))
+
 def main():
     parser = OptionParser(
         "i.MX Serial Bootloader / Flash Toolkit\n\n"
@@ -443,21 +453,33 @@ def main():
         "Or serial port (COMx on Windows, /dev/ttyusbX on Linux, etc.):\n"
         "  %prog -b PLAT_BSP -s COM1 ..."
     )
-    parser.add_option("--bsp", "-b", action = "store",
-                      dest = "bsp_name", metavar = "PLATFORM",
-                      help = "Platform BSP name (e.g., mx25)")
-    parser.add_option("--list-bsp", "-l", action = "store_true",
-                      dest = "list_bsp",
-                      help = "List available BSP names to use with -b/--bsp")
+    group = OptionGroup(parser, "Board Support Package (BSP) Configuration")
+    group.add_option("--bsp", "-b", action = "store",
+                     dest = "bsp_name", metavar = "PLATFORM",
+                     help = "Platform BSP name (e.g., mx25)")
+    group.add_option("--bsp-list", "-l", action = "store_true",
+                     dest = "list_bsp",
+                     help = "List available BSP names to use with -b/--bsp")
+    group.add_option("--bsp-config", "-c", action = "store",
+                     dest = "bsp_config_file", metavar = "CONFIGFILE",
+                     default = os.path.join(os.getcwd(), "bspinfo.conf"),
+                     help = "Optional BSP config file (defaults to $(PWD)/bspinfo.conf)")
+    parser.add_option_group(group)
+
     parser.add_option("--initialization-file", "-i", action = "store",
                       dest = "init_file", metavar = "FILE",
                       help = "Memory initialization file.")
-    parser.add_option("--appl-file", "-f", action = "store",
-                      dest = "application_file", metavar = "FILE",
-                      help = "Application binary.")
-    parser.add_option("--appl-address", "-a", action = "store",
-                      dest = "application_address", type = "int", metavar = "ADDRESS",
-                      help = ("Application start address."))
+
+
+    group = OptionGroup(parser, "Application Load Options")
+    group.add_option("--appl-file", "-f", action = "store",
+                     dest = "application_file", metavar = "FILE",
+                     help = "Application binary.")
+    group.add_option("--appl-address", "-a", action = "store",
+                     dest = "application_address", type = "int", metavar = "ADDRESS",
+                     help = ("Application start address."))
+
+    parser.add_option_group(group)
 
     rkgroup = OptionGroup(parser, "RAM Kernel Options")
     rkgroup.add_option("--ram-kernel", "-k", action = "store",
@@ -510,8 +532,13 @@ def main():
     if options.application_file and not options.application_address:
         parser.error("Application file specified without address.")
 
-    atkprog = ToolkitApplication(options)
+    bsp_table = get_bsp_table(options)
+    if options.list_bsp:
+        list_bsp_table(bsp_table)
+        sys.exit(0)
+
     try:
+        atkprog = ToolkitApplication(bsp_table, options)
         atkprog.run()
 
     except KeyboardInterrupt:
