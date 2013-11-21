@@ -25,9 +25,11 @@ import sys
 import collections
 if sys.version_info > (3, 0):
     from configparser import ConfigParser
+    from configparser import NoOptionError
 # Python 2.x support
 else:
     from ConfigParser import SafeConfigParser as ConfigParser
+    from ConfigParser import NoOptionError
 
 
 #: A namedtuple for BSP information relevant to ATK.
@@ -41,6 +43,14 @@ BoardSupportInfo = collections.namedtuple(
 
         # The bottom of main memory for the BSP.
         "memory_bottom_address",
+
+        # The memory initialization file for this BSP.
+        # If it is not available, it will be set to None.
+        "memory_init_file",
+
+        # The RAM kernel file itself.  If this is not specified,
+        # it will be None.
+        "ram_kernel_file",
 
         # RAM kernel origin is typically (base_memory_address + 0x4000)
         # for the stock kernel's linker script (e.g., ram_kernel_mx53.lds).
@@ -72,6 +82,16 @@ def load_board_support_table(info_filename_list):
         bsp_name = section
         bsp_desc = reader.get(section, "description")
 
+        try:
+            ram_kernel_file = reader.get(section, "ram_kernel_file")
+        except NoOptionError:
+            ram_kernel_file = None
+
+        try:
+            memory_init_file = reader.get(section, "memory_init_file")
+        except NoOptionError:
+            memory_init_file = None
+
         bsp_base_addr = getint("sdram_start")
         bsp_bottom_addr = getint("sdram_end")
         bsp_ram_kernel_origin = getint("ram_kernel_origin")
@@ -83,6 +103,8 @@ def load_board_support_table(info_filename_list):
             bsp_desc,
             bsp_base_addr,
             bsp_bottom_addr,
+            memory_init_file,
+            ram_kernel_file,
             bsp_ram_kernel_origin,
             bsp_usb_vid,
             bsp_usb_pid,
