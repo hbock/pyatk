@@ -13,10 +13,10 @@ setup(
         'pyatk.tests',
     ],
     test_suite='pyatk.tests',
-    scripts=['bin/flashtool.py'],
+    scripts=['bin/mx-flashtool.py'],
     install_requires=[
         'pyserial >= 2.6',
-        'pyusb >= 1.0.0a3',
+        'pyusb >= 1.0.0b1',
     ],
 
     license='BSD',
@@ -25,5 +25,8 @@ setup(
 ``pyATK`` (Python ATK) is an attempt at replacing the Advanced Toolkit
 (ATK) program distributed by Freescale Semiconductor for their i.MX
 series processors.
+
+``pyATK`` contains both a Python library and a command-line tool for flashing
+common i.MX processors.
 """,
 )
