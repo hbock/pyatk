@@ -38,7 +38,7 @@ from pyatk import ramkernel
 from pyatk import bspinfo
 from pyatk import __version__ as pyatk_version
 
-MX_FLASHTOOL_VERSION = "0.0.2"
+MX_FLASHTOOL_VERSION = "0.0.3"
 
 def writeln(line = ""):
     """
