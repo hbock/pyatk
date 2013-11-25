@@ -570,9 +570,6 @@ class ToolkitApplication(object):
             writeln(" [*] Loading application %r to 0x%08X..." % (filename, load_address))
             self.sbp.write_file(boot.FILE_TYPE_APPLICATION,
                                 load_address, image_size, appl_fd, progress_callback = progcb)
-            writeln("\n [*] Application loaded; executing...")
-            self.sbp.complete_boot()
-
             writeln(" [*] Application write/execute OK!")
 
 def read_initialization_file(filename):
