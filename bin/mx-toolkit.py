@@ -253,6 +253,10 @@ class ToolkitApplication(object):
         rkgroup.add_option("--no-print", "-n", action = "store_false",
                            dest = "print_flash_dump", default = True,
                            help = "Set this flag to disable dumping flash to the console.")
+        rkgroup.add_option("--bbt", action = "store_true",
+                           dest = "set_bbt_flag", default = False,
+                           help = ("Set this flag to enable bad block table (BBT) "
+                                   "handling in the RAM kernel."))
 
         parser.add_option_group(rkgroup)
 
@@ -393,7 +397,11 @@ class ToolkitApplication(object):
         self.channel_reinit()
 
         try:
-            writeln(" [*] RAM kernel initialize flash.")
+            enable_disable_str = ("enable" if options.set_bbt_flag else "disable")
+            writeln(" [*] Set flash BBT handling: %s" % (enable_disable_str,))
+            kernel.flash_set_bbt(options.set_bbt_flag)
+
+            writeln(" [*] Initializing flash part...")
             kernel.flash_initial()
             writeln(" [?] Querying RAM kernel for version information:")
             imxtype, flashmodel = kernel.getver()
