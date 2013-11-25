@@ -288,7 +288,7 @@ class SerialBootProtocol(object):
             # push out one more byte before trying to read
             # the damn status (which should be 0x88888888).
             if 0 == (bytes_consumed % 64):
-                self.channel.write("\x00")
+                self.channel.write(b"\x00")
 
             self._complete_boot()
 
