@@ -68,11 +68,16 @@ BSI = lambda *args: BoardSupportInfo._make(args)
 
 def load_board_support_table(info_filename_list):
     """
-    Load board support information from a CSV file with the following
-    format:
+    Load board support information from one of the CSV files in
+    ``info_filename_list``.
+
+    If no files in ``info_filename_list`` were able to be parsed,
+    :exc:`IOError` is raised.
     """
     reader = ConfigParser()
-    reader.read(info_filename_list)
+    success_list = reader.read(info_filename_list)
+    if not success_list:
+        raise IOError("No suitable configuration files found.")
 
     new_bsp_table = collections.OrderedDict()
     for section in reader.sections():
