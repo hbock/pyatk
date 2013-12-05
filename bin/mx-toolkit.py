@@ -267,7 +267,7 @@ class ToolkitApplication(object):
 
     def run_run(self, args):
         parser = self.get_base_parser(
-            "Executing an application (u-boot.bin) compiled to start at 0x82000000:\n"
+            "Execute an application (u-boot.bin) compiled to start at 0x82000000:\n"
             "  %prog run -b PLAT_BSP u-boot.bin 0x82000000"
         )
         options, args = parser.parse_args(args)
@@ -599,8 +599,18 @@ def read_initialization_file(filename):
 
 def get_bsp_table(options):
     """ Load BSP config files as necessary, returning the combined BSP table. """
+    if "nt" == os.name:
+        user_dir = os.path.join(os.getenv("APPDATA"), "pyatk")
+
+    else:
+        user_dir = os.path.join(os.path.expanduser("~"), ".pyatk")
+
+    if not os.path.exists(user_dir):
+        writeln(" [i] Creating configuration directory...")
+        os.makedirs(user_dir, 0o770)
+
     bsp_table_search_list = [
-        os.path.join(os.path.expanduser("~"), ".pyatk", "bspinfo.conf"),
+        os.path.join(user_dir, "bspinfo.conf"),
         options.bsp_config_file,
     ]
 
@@ -608,19 +618,21 @@ def get_bsp_table(options):
         return bspinfo.load_board_support_table(bsp_table_search_list)
 
     except IOError as err:
-        raise ToolkitError("Unable to load BSP information table from "
-                           "search list %r: %s" % (
-            bsp_table_search_list, err
-        ))
+        writeln(" [!] Error loading BSP information table: %s" % (err,))
+        writeln("    [*] Search paths:")
+        for filename in bsp_table_search_list:
+            writeln("    [-] %s" % (filename,))
+
+        raise ToolkitError("Unable to load BSP information table.")
 
 def main():
     def usage(error = None):
-        sys.stderr.write("Usage: %s COMMAND [OPTIONS...]\n\n" % (sys.argv[0],))
+        sys.stderr.write("\nUsage: %s COMMAND [OPTIONS...]\n\n" % (sys.argv[0],))
         sys.stderr.write("  COMMAND = flash program -b BSP FILE  [ADDRESS=0]\n"
                          "            flash dump    -b BSP BYTES [ADDRESS=0]\n"
-                         "            flash erase   -b BSP BYTES [ADDRESS=0]\n"
-                         "            flash test    -b BSP\n"
-                         "            memtest       -b BSP\n"
+                         #"            flash erase   -b BSP BYTES [ADDRESS=0]\n"
+                         #"            flash test    -b BSP\n"
+                         #"            memtest       -b BSP\n"
                          "            run -b BSP BINARY LOADADDR\n"
                          "            listbsp\n\n")
 

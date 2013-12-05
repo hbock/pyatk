@@ -16,16 +16,26 @@ BSP Configuration - Initialization files, RAM kernels, etc.
 -----------------------------------------------------------
 
 ``mx-toolkit`` understands a BSP (Board Support Package) configuration
-file.  The default file is "bspinfo.conf" in the directory containing
-"mx-toolkit.py" and is in INI format.
+file.  It is an INI format configuration file.  The default search locations
+for "bspinfo.conf" are:
+
+ * %APPDATA%\pyatk\bspinfo.conf (Windows)
+ * ~/.pyatk/bspinfo.conf (UNIX)
+ * The current working directory (all platforms)
+
+Alternatively, you can manually set the BSP configuration file with the -c option::
+
+  local:~/project $ mx-toolkit.py -c ~/boards/mybsp.conf listbsp
 
 The BSP configuration file pulls together several pieces of information
 required to bootstrap a given board or i.MX processor family:
 
  * Start address of SDRAM
  * End address of SDRAM (inclusive)
- * Origin (start address) of RAM kernel
  * USB VID and PID for the bootstrap mode of the i.MX processor
+ * Origin (start address) of RAM kernel
+ * RAM kernel binary file (optional)
+ * Memory initialization file (optional)
 
 The SDRAM range and USB VID/PID generally will not change from board
 to board with the same i.MX processor family (e.g., i.MX258).  However,
