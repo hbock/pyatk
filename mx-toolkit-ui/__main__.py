@@ -165,13 +165,14 @@ class ToolkitMainWindow(QMainWindow):
 
         self.disable_all_the_things()
         self.setupui_bsp_select()
+        self.setupui_binary_file_table()
 
     def disable_all_the_things(self):
         for widget in [
             self.ui.binary_file_table_remove_button,
             self.ui.memory_operation_address_lineedit,
             self.ui.operation_address_lineedit,
-            self.ui.go_button,
+#            self.ui.go_button,
             self.ui.operation_progress_bar,
         ]:
             widget.setEnabled(False)
