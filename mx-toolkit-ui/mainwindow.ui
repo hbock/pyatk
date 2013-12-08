@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>580</width>
-    <height>516</height>
+    <width>486</width>
+    <height>753</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -20,8 +20,82 @@
    <set>QMainWindow::AllowTabbedDocks|QMainWindow::AnimatedDocks</set>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout_2">
-    <item row="0" column="0" colspan="2">
+   <layout class="QGridLayout" name="gridLayout_3">
+    <item row="1" column="0" colspan="2">
+     <widget class="QGroupBox" name="groupBox">
+      <property name="title">
+       <string>Image file selection</string>
+      </property>
+      <layout class="QGridLayout" name="gridLayout_2">
+       <item row="2" column="1" colspan="2">
+        <widget class="QPushButton" name="binary_file_table_remove_button">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Remove</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QPushButton" name="binary_file_browse_button">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Browse...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0" colspan="2">
+        <widget class="QLineEdit" name="binary_file_lineedit">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QPushButton" name="binary_file_table_add_button">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="text">
+          <string>Add</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0" colspan="3">
+        <widget class="QTableView" name="binary_file_history_tableview"/>
+       </item>
+      </layout>
+      <zorder>binary_file_table_remove_button</zorder>
+      <zorder>binary_file_table_add_button</zorder>
+      <zorder>binary_file_browse_button</zorder>
+      <zorder>binary_file_lineedit</zorder>
+      <zorder>binary_file_history_tableview</zorder>
+      <zorder>binary_file_table_add_button</zorder>
+      <zorder>binary_file_browse_button</zorder>
+      <zorder>binary_file_lineedit</zorder>
+      <zorder>binary_file_history_tableview</zorder>
+      <zorder>binary_file_lineedit</zorder>
+      <zorder>binary_file_browse_button</zorder>
+      <zorder>binary_file_history_tableview</zorder>
+      <zorder>binary_file_table_add_button</zorder>
+     </widget>
+    </item>
+    <item row="2" column="0" colspan="2">
      <widget class="QTabWidget" name="tabWidget">
       <property name="sizePolicy">
        <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
@@ -114,6 +188,19 @@
              </property>
             </widget>
            </item>
+           <item row="0" column="2">
+            <spacer name="horizontalSpacer">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
           </layout>
          </widget>
         </item>
@@ -133,16 +220,16 @@
           </property>
           <layout class="QVBoxLayout" name="verticalLayout_6">
            <item>
-            <widget class="QCheckBox" name="flash_lba_checkbox">
+            <widget class="QCheckBox" name="flash_bbt_checkbox">
              <property name="text">
-              <string>LBA</string>
+              <string>BBT</string>
              </property>
             </widget>
            </item>
            <item>
-            <widget class="QCheckBox" name="flash_bbt_checkbox">
+            <widget class="QCheckBox" name="flash_lba_checkbox">
              <property name="text">
-              <string>BBT</string>
+              <string>LBA</string>
              </property>
             </widget>
            </item>
@@ -163,6 +250,13 @@
           </layout>
          </widget>
         </item>
+        <item row="2" column="0" colspan="2">
+         <widget class="QDialogButtonBox" name="flash_tool_buttonbox">
+          <property name="standardButtons">
+           <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+          </property>
+         </widget>
+        </item>
        </layout>
       </widget>
       <widget class="QWidget" name="tab">
@@ -179,10 +273,10 @@
            <string>Address settings</string>
           </property>
           <layout class="QGridLayout" name="gridLayout_6">
-           <item row="0" column="0">
-            <widget class="QLabel" name="label_7">
-             <property name="text">
-              <string>Start address</string>
+           <item row="1" column="1">
+            <widget class="QLineEdit" name="memory_operation_length_lineedit">
+             <property name="alignment">
+              <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
              </property>
             </widget>
            </item>
@@ -193,10 +287,10 @@
              </property>
             </widget>
            </item>
-           <item row="1" column="1">
-            <widget class="QLineEdit" name="memory_operation_length_lineedit">
-             <property name="alignment">
-              <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_7">
+             <property name="text">
+              <string>Start address</string>
              </property>
             </widget>
            </item>
@@ -206,6 +300,19 @@
               <string>Test length (bytes)</string>
              </property>
             </widget>
+           </item>
+           <item row="0" column="2">
+            <spacer name="horizontalSpacer_3">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
            </item>
           </layout>
          </widget>
@@ -246,16 +353,10 @@
           </layout>
          </widget>
         </item>
-        <item row="2" column="0">
-         <widget class="QPushButton" name="ram_tool_go_button">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>Go</string>
+        <item row="2" column="0" colspan="2">
+         <widget class="QDialogButtonBox" name="memory_tool_buttonbox">
+          <property name="standardButtons">
+           <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
           </property>
          </widget>
         </item>
@@ -263,18 +364,107 @@
       </widget>
      </widget>
     </item>
-    <item row="1" column="0">
+    <item row="3" column="0">
      <widget class="QProgressBar" name="operation_progress_bar">
       <property name="value">
        <number>0</number>
       </property>
      </widget>
     </item>
-    <item row="1" column="1">
+    <item row="3" column="1">
      <widget class="QPushButton" name="show_log_button">
       <property name="text">
        <string>Show Log</string>
       </property>
+     </widget>
+    </item>
+    <item row="0" column="0" colspan="2">
+     <widget class="QGroupBox" name="groupBox_2">
+      <property name="title">
+       <string>Board Support Package Selection</string>
+      </property>
+      <layout class="QGridLayout" name="gridLayout">
+       <item row="2" column="2">
+        <widget class="QPushButton" name="ram_kernel_browse_button">
+         <property name="text">
+          <string>Browse...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="2">
+        <widget class="QCheckBox" name="bsp_custom_checkbox">
+         <property name="text">
+          <string>Custom</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="label_6">
+         <property name="text">
+          <string>BSP Name</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="2">
+        <widget class="QPushButton" name="memory_init_browse_button">
+         <property name="text">
+          <string>Browse...</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="label">
+         <property name="text">
+          <string>Memory init file</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QComboBox" name="bsp_select_combobox"/>
+       </item>
+       <item row="2" column="1">
+        <widget class="QLineEdit" name="ram_kernel_binary_lineedit"/>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="memory_init_lineedit"/>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="label_2">
+         <property name="text">
+          <string>RAM kernel binary</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QLineEdit" name="ram_kernel_origin_lineedit">
+         <property name="text">
+          <string>0x80000000</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="label_3">
+         <property name="text">
+          <string>RAM kernel origin</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+      <zorder>label_3</zorder>
+      <zorder>label</zorder>
+      <zorder>label_2</zorder>
+      <zorder>label_6</zorder>
+      <zorder>bsp_select_combobox</zorder>
+      <zorder>ram_kernel_binary_lineedit</zorder>
+      <zorder>ram_kernel_origin_lineedit</zorder>
+      <zorder>memory_init_lineedit</zorder>
+      <zorder>bsp_select_combobox</zorder>
+      <zorder>ram_kernel_binary_lineedit</zorder>
+      <zorder>ram_kernel_origin_lineedit</zorder>
+      <zorder>memory_init_lineedit</zorder>
+      <zorder>bsp_custom_checkbox</zorder>
+      <zorder>memory_init_browse_button</zorder>
+      <zorder>ram_kernel_browse_button</zorder>
      </widget>
     </item>
    </layout>
@@ -284,7 +474,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>580</width>
+     <width>486</width>
      <height>21</height>
     </rect>
    </property>
@@ -304,147 +494,6 @@
    <addaction name="menu_Help"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <widget class="QDockWidget" name="dockWidget">
-   <property name="windowTitle">
-    <string>Board Support Package Selection</string>
-   </property>
-   <attribute name="dockWidgetArea">
-    <number>4</number>
-   </attribute>
-   <widget class="QWidget" name="dockWidgetContents_3">
-    <layout class="QGridLayout" name="gridLayout">
-     <item row="0" column="0">
-      <widget class="QLabel" name="label_6">
-       <property name="text">
-        <string>BSP Name</string>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="1">
-      <widget class="QComboBox" name="bsp_select_combobox"/>
-     </item>
-     <item row="0" column="2">
-      <widget class="QCheckBox" name="bsp_custom_checkbox">
-       <property name="text">
-        <string>Custom</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0">
-      <widget class="QLabel" name="label">
-       <property name="text">
-        <string>Memory init file</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="1">
-      <widget class="QLineEdit" name="memory_init_lineedit"/>
-     </item>
-     <item row="1" column="2">
-      <widget class="QPushButton" name="memory_init_browse_button">
-       <property name="text">
-        <string>Browse...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="0">
-      <widget class="QLabel" name="label_2">
-       <property name="text">
-        <string>RAM kernel binary</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QLineEdit" name="ram_kernel_binary_lineedit"/>
-     </item>
-     <item row="2" column="2">
-      <widget class="QPushButton" name="ram_kernel_browse_button">
-       <property name="text">
-        <string>Browse...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="0">
-      <widget class="QLabel" name="label_3">
-       <property name="text">
-        <string>RAM kernel origin</string>
-       </property>
-      </widget>
-     </item>
-     <item row="3" column="1">
-      <widget class="QLineEdit" name="ram_kernel_origin_lineedit">
-       <property name="text">
-        <string>0x80000000</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
-  <widget class="QDockWidget" name="dockWidget_2">
-   <property name="windowTitle">
-    <string>Binary file selection</string>
-   </property>
-   <attribute name="dockWidgetArea">
-    <number>1</number>
-   </attribute>
-   <widget class="QWidget" name="dockWidgetContents_4">
-    <layout class="QGridLayout" name="gridLayout_8">
-     <item row="0" column="0" colspan="2">
-      <widget class="QLineEdit" name="binary_file_lineedit">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-      </widget>
-     </item>
-     <item row="0" column="2">
-      <widget class="QPushButton" name="binary_file_browse_button">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="text">
-        <string>Browse...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="1" column="0" colspan="3">
-      <widget class="QTableView" name="binary_file_history_tableview"/>
-     </item>
-     <item row="2" column="0">
-      <widget class="QPushButton" name="binary_file_table_add_button">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="text">
-        <string>Add...</string>
-       </property>
-      </widget>
-     </item>
-     <item row="2" column="1">
-      <widget class="QPushButton" name="binary_file_table_remove_button">
-       <property name="sizePolicy">
-        <sizepolicy hsizetype="Maximum" vsizetype="Fixed">
-         <horstretch>0</horstretch>
-         <verstretch>0</verstretch>
-        </sizepolicy>
-       </property>
-       <property name="text">
-        <string>Remove</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
-   </widget>
-  </widget>
   <action name="action_exit">
    <property name="text">
     <string>&amp;Exit</string>

@@ -1,11 +1,15 @@
 import sys
 import os
+import time
 
 from PySide.QtGui import QApplication, QMainWindow
 from PySide.QtGui import QFileDialog
 
 from PySide.QtGui import QValidator, QFont
+from PySide.QtGui import QAbstractItemView
+from PySide.QtGui import QDialogButtonBox
 from PySide.QtCore import QAbstractTableModel
+from PySide.QtCore import QModelIndex
 from PySide.QtCore import Qt
 
 from mainwindow import Ui_MainWindow
@@ -16,26 +20,12 @@ from pyatk import bspinfo
 # from pyatk.channel.uart import UARTChannel
 # from serial.tools import list_ports
 
-class BspAddressValidator(QValidator):
+class AddressValidator(QValidator):
     """ Address text input validator for BSP memory addresses. """
-    def __init__(self):
-        super(BspAddressValidator, self).__init__()
-        self.min = 0x00000100
-        self.max = 0x1fffffff
-        self.min_str = "0x%08x" % self.min
-        self.max_str = "0x%08x" % self.max
-
-    def fixup(self, input_value):
-        if input_value == "":
-            fixed = self.min_str
-        else:
-            int_value = int(input_value, 0)
-            if int_value < self.min:
-                fixed = self.min_str
-            else:
-                fixed = self.max_str
-
-        return fixed
+    def __init__(self, minimum=0, maximum=0xffffffff):
+        super(AddressValidator, self).__init__()
+        self.min = minimum
+        self.max = maximum
 
     def validate(self, input_value, pos):
         try:
@@ -48,9 +38,64 @@ class BspAddressValidator(QValidator):
                 state = QValidator.Acceptable
 
         except ValueError:
-            state = QValidator.Invalid
+            if input_value in ("", "0x", "0b", "0o"):
+                state = QValidator.Intermediate
+            else:
+                state = QValidator.Invalid
 
         return state
+
+class BinaryFileHistoryTable(QAbstractTableModel):
+    column_list = [
+        "Filename",
+        "Description",
+        "Size",
+        "Last Modified",
+    ]
+    def __init__(self, parent=None):
+        super(BinaryFileHistoryTable, self).__init__(parent)
+        self.file_list = []
+
+    def columnCount(self, parent):
+        return len(self.column_list)
+
+    def rowCount(self, parent):
+        return len(self.file_list)
+
+    def headerData(self, section, orientation, role):
+        if role == Qt.DisplayRole and Qt.Horizontal == orientation:
+            return self.column_list[section]
+
+    def data(self, index, role):
+        if Qt.DisplayRole == role:
+            filename, description, stat = self.file_list[index.row()]
+            column = index.column()
+            ret = "NOPE"
+
+            if 0 == column:
+                ret = os.path.basename(filename)
+            elif 1 == column:
+                ret = description
+            elif 2 == column:
+                ret = stat.st_size
+            elif 3 == column:
+                timestamp = time.localtime(stat.st_mtime)
+                ret = time.strftime("%Y-%m-%d %H:%M", timestamp)
+
+            return ret
+
+    def add_file(self, filename, description=""):
+        try:
+            file_stat = os.stat(filename)
+            next_row = len(self.file_list)
+
+            self.beginInsertRows(QModelIndex(), next_row, next_row)
+            self.file_list.append((filename, description, file_stat))
+            self.endInsertRows()
+
+        except (IOError, OSError) as err:
+            # TODO: show error message
+            print("NOPE! %s" % (err,))
 
 class StringHexTableModel(QAbstractTableModel):
     def __init__(self, width = 8):
@@ -161,18 +206,18 @@ class ToolkitMainWindow(QMainWindow):
         self.ui.setupUi(self)
 
         # self.memory_dump_model = StringHexTableModel(width = 8)
-        # self.bsp_addr_validator = BspAddressValidator()
+        self.addr_validator = AddressValidator()
 
         self.disable_all_the_things()
         self.setupui_bsp_select()
         self.setupui_binary_file_table()
+        self.setupui_flash_tool()
+        self.setupui_memory_tool()
 
     def disable_all_the_things(self):
         for widget in [
-            self.ui.binary_file_table_remove_button,
             self.ui.memory_operation_address_lineedit,
             self.ui.operation_address_lineedit,
-#            self.ui.go_button,
             self.ui.operation_progress_bar,
         ]:
             widget.setEnabled(False)
@@ -196,12 +241,47 @@ class ToolkitMainWindow(QMainWindow):
 
         browse_button.clicked.connect(do_browse)
 
+    def setupui_flash_tool(self):
+        self.ui.operation_address_lineedit.setValidator(self.addr_validator)
+        self.ui.operation_length_lineedit.setValidator(self.addr_validator)
+
+        self.ui.flash_tool_buttonbox.clear()
+        self.flash_tool_go_button = self.ui.flash_tool_buttonbox.addButton(
+            "Go", QDialogButtonBox.ActionRole
+        )
+
+    def setupui_memory_tool(self):
+        self.ui.memory_operation_address_lineedit.setValidator(self.addr_validator)
+        self.ui.memory_operation_length_lineedit.setValidator(self.addr_validator)
+        self.ui.memory_tool_buttonbox.clear()
+        self.memory_tool_go_button = self.ui.memory_tool_buttonbox.addButton(
+            "Go", QDialogButtonBox.ActionRole
+        )
+
     def setupui_binary_file_table(self):
+        self.binary_file_table = BinaryFileHistoryTable(parent=self)
+        self.ui.binary_file_history_tableview.setModel(self.binary_file_table)
+        self.ui.binary_file_history_tableview.horizontalHeader().show()
+        self.ui.binary_file_history_tableview.setSelectionBehavior(
+            QAbstractItemView.SelectRows
+        )
+        # TODO: resize on entry/removal
+        self.ui.binary_file_history_tableview.resizeColumnsToContents()
+
         self.connect_browse_to_lineedit(
             self.ui.binary_file_browse_button,
             self.ui.binary_file_lineedit,
             "Select new binary file..."
         )
+
+        self.ui.binary_file_table_add_button.clicked.connect(
+            self.ui_add_binary_file
+        )
+
+    def ui_add_binary_file(self):
+        filename = self.ui.binary_file_lineedit.text()
+        if "" != filename:
+            self.binary_file_table.add_file(filename)
 
     def get_selected_bsp_info(self):
         """
@@ -244,6 +324,8 @@ class ToolkitMainWindow(QMainWindow):
             self.ui.ram_kernel_binary_lineedit,
             "Select RAM kernel binary..."
         )
+
+        self.ui.ram_kernel_origin_lineedit.setValidator(self.addr_validator)
 
         # For whatever reason, PySide does voodoo with namedtuples when converted
         # to a QVariant.  PySide docs imply it is supposed to opaquely handle any Python
