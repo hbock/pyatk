@@ -202,6 +202,32 @@ class ToolkitMainWindow(QMainWindow):
             "Select new binary file..."
         )
 
+    def get_selected_bsp_info(self):
+        """
+        Return the BoardSupportInfo instance corresponding to the
+        selected BSP, including any custom RAM kernel information.
+        """
+        current_index = self.ui.bsp_select_combobox.currentIndex()
+        selected_bsp_info = self.ui.bsp_select_combobox.itemData(current_index)
+
+        if Qt.Checked == self.ui.bsp_custom_checkbox.checkState():
+            ram_kernel_origin = int(self.ui.ram_kernel_origin_lineedit.text(), 0)
+            ram_kernel_file = self.ui.ram_kernel_binary_lineedit.text()
+            memory_init_file = self.ui.memory_init_lineedit.text()
+
+            selected_bsp_info = bspinfo.BoardSupportInfo(
+                "%s [Custom Kernel]" % (selected_bsp_info.description,),
+                selected_bsp_info.base_memory_address,
+                selected_bsp_info.memory_bottom_address,
+                memory_init_file,
+                ram_kernel_file,
+                ram_kernel_origin,
+                selected_bsp_info.usb_vid,
+                selected_bsp_info.usb_pid,
+            )
+
+        return selected_bsp_info
+
     def setupui_bsp_select(self):
         """ Set up the device selection UI """
         bsp_table = get_bsp_table()
@@ -231,24 +257,11 @@ class ToolkitMainWindow(QMainWindow):
             self.ui.bsp_select_combobox.addItem(u"[%s] %s" % (bsp_name, bsp_info.description),
                                                 OpaqueWrapper(bsp_info))
 
-        self.ui.bsp_select_combobox.addItem(u"Custom", -1)
+        self.ui.bsp_custom_checkbox.stateChanged.connect(self.ui_bsp_custom_check_state_changed)
+        self.ui_bsp_custom_check_state_changed(Qt.Unchecked)
 
-    def ui_bsp_selection_changed(self, index):
-        """ The BSP selection combobox changed. """
-        bsp_info = self.ui.bsp_select_combobox.itemData(index)
-        # If we are in "Custom" mode, enable all widgets
-        # for configuring the BSP.
-        if -1 == bsp_info:
-            enable_custom_input = True
-
-        else:
-            bsp_info = bsp_info.wrapped
-            # Update the BSP information widgets.
-            self.ui.memory_init_lineedit.setText(bsp_info.memory_init_file)
-            self.ui.ram_kernel_binary_lineedit.setText(bsp_info.ram_kernel_file)
-            self.ui.ram_kernel_origin_lineedit.setText("0x%08X" % (bsp_info.ram_kernel_origin,))
-
-            enable_custom_input = False
+    def ui_bsp_custom_check_state_changed(self, new_state):
+        enable_custom_input = (Qt.Checked == new_state)
 
         for widget in [
             self.ui.ram_kernel_binary_lineedit,
@@ -258,6 +271,17 @@ class ToolkitMainWindow(QMainWindow):
             self.ui.memory_init_browse_button,
         ]:
             widget.setEnabled(enable_custom_input)
+
+    def ui_bsp_selection_changed(self, index):
+        """ The BSP selection combobox changed. """
+        bsp_info = self.ui.bsp_select_combobox.itemData(index)
+        # If we are in "Custom" mode, enable all widgets
+        # for configuring the BSP.
+        bsp_info = bsp_info.wrapped
+        # Update the BSP information widgets.
+        self.ui.memory_init_lineedit.setText(bsp_info.memory_init_file)
+        self.ui.ram_kernel_binary_lineedit.setText(bsp_info.ram_kernel_file)
+        self.ui.ram_kernel_origin_lineedit.setText("0x%08X" % (bsp_info.ram_kernel_origin,))
 
     #def _setupui_mbrowser_browser(self):
     #    """ Set up the bootstrap memory browser UI """
