@@ -390,10 +390,15 @@ class ToolkitApplication(object):
             raise ToolkitError("Missing subcommand for 'flash' command!")
 
         def load_cb(current, total):
-            bar_len = 50
+            current //= 1024
+            total //= 1024
+            bar_len = 25
             bar_on = int(float(current) / total * bar_len)
             bar_off = bar_len - bar_on
-            sys.stdout.write("     [%s%s] %u/%u B\r" % ("="*bar_on, " "*bar_off, current, total))
+            sys.stdout.write("     [%s%s] %u / %u kB\r" % ("="*bar_on,
+                                                           " "*bar_off,
+                                                           current,
+                                                           total))
             sys.stdout.flush()
 
         # Load and run the RAM kernel image.
@@ -425,7 +430,9 @@ class ToolkitApplication(object):
             writeln(" <!> RAM kernel error: %s" % (err,))
 
         except Exception as err:
+            tb = sys.exc_info()[2]
             writeln(" <!> Unhandled error: %s" % (err,))
+            writeln(" <!> Traceback: %s" % ("\n".join(traceback.format_tb(tb)),))
 
         finally:
             writeln(" [*] Resetting CPU...")
@@ -483,7 +490,7 @@ class ToolkitApplication(object):
         block_size = 0x20000
 
         current_address = 0
-        bar_len = 50
+        bar_len = 35
 
         class Progress(object):
             def __init__(self):
@@ -499,18 +506,19 @@ class ToolkitApplication(object):
                 bar_off = bar_len - bar_on
                 total_time = int(time.time() - self.start_time)
 
-                sys.stdout.write("[%s%s] %u/%u B @ 0x%08X (%.2f%%) %02d:%02d\r" % \
-                                 ("="*bar_on, " "*bar_off, current, data_size, current_address,
-                                     percent, total_time / 60, total_time % 60))
+                sys.stdout.write("[%s%s] 0x%08X (%5.2f%%) %02d:%02d\r" % \
+                                 ("="*bar_on, " "*bar_off,
+                                  current_address, percent, total_time / 60, total_time % 60))
+
                 sys.stdout.flush()
 
             def program_cb(self, block, write_length):
-                sys.stdout.write("Program ")
+                sys.stdout.write("     Program ")
                 self.write_progress(self.program_current, write_length)
                 self.program_current += write_length
 
             def verify_cb(self, block, verify_length):
-                sys.stdout.write("Verify  ")
+                sys.stdout.write("     Verify  ")
                 self.write_progress(self.verify_current, verify_length)
                 self.verify_current += verify_length
 
@@ -523,12 +531,12 @@ class ToolkitApplication(object):
         # byte of the block.
         block_start = (start_address & ~(block_size-1))
         if block_start < start_address:
-            initial_pad = "\x00" * (start_address - block_start)
+            initial_pad = b"\x00" * (start_address - block_start)
             writeln(" [!] Flash program start address does not fall on block boundary.")
             writeln(" [!] Writing {0} pad bytes at start of block.".format(len(initial_pad)))
 
         else:
-            initial_pad = ""
+            initial_pad = b""
 
         with open(path, "rb") as file_fp:
             read_size = block_size
@@ -546,6 +554,8 @@ class ToolkitApplication(object):
                                      verify_callback  = prog.verify_cb)
                 current_address += len(chunk)
                 chunk = file_fp.read(read_size)
+
+        writeln()
 
     def ram_kernel_flash_test(self, kernel, options, args):
         writeln(" [*] Running RKL flash test.")
