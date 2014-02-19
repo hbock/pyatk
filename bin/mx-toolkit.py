@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2012-2013 Harry Bock <bock.harryw@gmail.com>
+# Copyright (c) 2012-2014 Harry Bock <bock.harryw@gmail.com>
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,7 @@ from pyatk import ramkernel
 from pyatk import bspinfo
 from pyatk import __version__ as pyatk_version
 
-MX_FLASHTOOL_VERSION = "0.0.3"
+MX_FLASHTOOL_VERSION = "0.0.4"
 
 def writeln(line = ""):
     """

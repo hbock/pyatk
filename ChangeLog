@@ -1,0 +1,12 @@
+mx-toolkit:
+  v 0.0.4 - 02/19/2014
+  --------------------
+  * Implement 'flash erase' feature
+  * Provide useful error messages for several error cases in the
+    mx-toolkit driver, including invalid addresses, sizes, etc.
+  * Warn if missing the memory initialization file
+  * Provide stubbed out RAM kernel and memory init file configurations
+    in the default bspinfo.conf.
+  * Allow for terminal widths of at least 80 characters
+  * Use %APPDATA%\pyatk on Windows for configuration files instead of the user's
+    %HOME%\.pyatk
