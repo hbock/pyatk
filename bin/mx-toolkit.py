@@ -143,7 +143,12 @@ class ToolkitApplication(object):
         writeln(" [*] Initial boot status: %s" % boot.get_status_string(status))
 
         self.mem_initialize(options)
-        self.mem_test()
+        try:
+            self.mem_test()
+        except IOError:
+            writeln(" [!] Memory test failed. Perhaps your memory init file ")
+            writeln("     is missing or invalid for your target.")
+            raise
 
     def channel_reinit(self):
         """ Close and re-open the ATK channel. """
@@ -342,6 +347,9 @@ class ToolkitApplication(object):
                 if boot.DATA_SIZE_BYTE == initwidth:
                     writeln("  [>] Write 0x%02X to 0x%08X" % (initval, initaddr))
                 self.sbp.write_memory(initaddr, initwidth, initval)
+        else:
+            writeln(" [W] No memory initialization file specified.")
+            writeln(" [W] Device communication may not work at all.")
 
     def run_ram_kernel(self, options, args):
         kernel = ramkernel.RAMKernelProtocol(self.channel)
