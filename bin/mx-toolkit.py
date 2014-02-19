@@ -377,8 +377,8 @@ class ToolkitApplication(object):
 
         try:
             flash_command = args[0]
-            if "test" == flash_command:
-                flash_run_method = self.ram_kernel_flash_test
+            if "erase" == flash_command:
+                flash_run_method = self.ram_kernel_flash_erase
             elif "program" == flash_command:
                 flash_run_method = self.ram_kernel_flash_file
             elif "dump" == flash_command:
@@ -436,6 +436,9 @@ class ToolkitApplication(object):
 
         finally:
             writeln(" [*] Resetting CPU...")
+            # Sometimes we need to let the RAM kernel "settle" after
+            # flash commands before issuing the RKL reset command.
+            time.sleep(1)
             kernel.reset()
             self.channel_reinit()
 
@@ -557,30 +560,38 @@ class ToolkitApplication(object):
 
         writeln()
 
-    def ram_kernel_flash_test(self, kernel, options, args):
-        writeln(" [*] Running RKL flash test.")
-        writeln(" [*] Read flash first page:")
-        start_address = 0x0000
-        flash_page = kernel.flash_dump(start_address, 1024)
-        print_hex_dump(flash_page, start_address)
+    def ram_kernel_flash_erase(self, kernel, options, args):
+        erase_size = args[0]
+        try:
+            erase_size = int(erase_size, 0)
+
+        except ValueError:
+            raise ToolkitError("Invalid flash erase size %r!" % (erase_size,))
+
+        if len(args) > 1:
+            address = args[1]
+            try:
+                start_address = int(address, 0)
+
+            except ValueError:
+                raise ToolkitError("Invalid erase start address %r!" % (address,))
+
+        else:
+            writeln(" [*] Start address not specified; starting at block 0.")
+            start_address = 0
+
+        if erase_size < 0:
+            raise ToolkitError("Erase size cannot be negative!")
+
+        if start_address < 0:
+            raise ToolkitError("Start address cannot be negative!")
+
+        writeln(" [*] Erase %u bytes starting at 0x%08x." % (erase_size, start_address))
 
         def erase_cb(block_index, block_size):
             writeln("   [>] Erased block %d (size %d bytes)." % (block_index, block_size))
 
-        size = 4096 * 4
-        writeln(" [*] Erasing first %d bytes." % size)
-        kernel.flash_erase(start_address, size, erase_callback = erase_cb)
-        writeln(" [*] Dump after erase...")
-        flash_page = kernel.flash_dump(start_address, size)
-        print_hex_dump(flash_page, start_address)
-
-        writeln(" [*] Test programming 0xDEADBEEF to first page...")
-        kernel.flash_program(start_address, "\xDE\xAD\xBE\xEF" * (size/8),
-                             read_back_verify = True)
-
-        writeln(" [*] Dump after program...")
-        flash_page = kernel.flash_dump(start_address, size)
-        print_hex_dump(flash_page, start_address)
+        kernel.flash_erase(start_address, erase_size, erase_callback = erase_cb)
 
     def run_application(self, filename, load_address):
         appl_stat = os.stat(filename)
@@ -648,7 +659,7 @@ def main():
         sys.stderr.write("\nUsage: %s COMMAND [OPTIONS...]\n\n" % (sys.argv[0],))
         sys.stderr.write("  COMMAND = flash program -b BSP FILE  [ADDRESS=0]\n"
                          "            flash dump    -b BSP BYTES [ADDRESS=0]\n"
-                         #"            flash erase   -b BSP BYTES [ADDRESS=0]\n"
+                         "            flash erase   -b BSP BYTES [ADDRESS=0]\n"
                          #"            flash test    -b BSP\n"
                          #"            memtest       -b BSP\n"
                          "            run -b BSP BINARY LOADADDR\n"
