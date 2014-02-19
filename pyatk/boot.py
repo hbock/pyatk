@@ -70,6 +70,9 @@ ACK_ENGINEERING_PART = 0x56787856
 #: Acknolwedge word for successful memory write
 ACK_WRITE_SUCCESS    = 0x128A8A12
 
+UINT32_MIN = 0x00000000
+UINT32_MAX = 0xffffffff
+
 STATUS_CODE_TABLE = {
     HAB_PASSED: "Successful operation complete",
     HAB_FAILURE: "Failure not matching any other description",
@@ -156,10 +159,10 @@ class SerialBootProtocol(object):
         if datasize not in (DATA_SIZE_BYTE,
                             DATA_SIZE_HALFWORD,
                             DATA_SIZE_WORD):
-            raise ValueError("Invalid data size")
+            raise ValueError("read_memory: Invalid data size")
 
-        if address < 0 or address > 0xffffffff:
-            raise ValueError("Invalid address")
+        if not (UINT32_MIN <= address <= UINT32_MAX):
+            raise ValueError("read_memory: Invalid address")
 
         command = struct.pack(">HIBI", CMD_READ_MEMORY, address, datasize, length)
         self._write_command(command)
@@ -212,10 +215,10 @@ class SerialBootProtocol(object):
         if datasize not in (DATA_SIZE_BYTE,
                             DATA_SIZE_HALFWORD,
                             DATA_SIZE_WORD):
-            raise ValueError("Invalid data size")
+            raise ValueError("write_memory: Invalid data size")
 
-        if address < 0 or address > 0xffffffff:
-            raise ValueError("Invalid address")
+        if not (UINT32_MIN <= address <= UINT32_MAX):
+            raise ValueError("write_memory: Invalid address")
 
         command = struct.pack(">HIB4x", CMD_WRITE_MEMORY, address, datasize)
         
@@ -258,6 +261,12 @@ class SerialBootProtocol(object):
         If ``filetype`` is :const:`FILE_TYPE_APPLICATION`, you must call
         :meth:`complete_boot` to trigger execution.
         """
+        if not (UINT32_MIN <= address <= UINT32_MAX):
+            raise ValueError("Write start address must be a 32-bit integer")
+
+        if not (UINT32_MIN <= length <= UINT32_MAX):
+            raise ValueError("Write length must be a 32-bit integer")
+
         command = struct.pack(">HIxI4xB", CMD_WRITE_FILE, address, length, filetype)
         self._write_command(command)
         self._read_ack()
