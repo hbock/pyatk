@@ -19,7 +19,7 @@ BSP Configuration - Initialization files, RAM kernels, etc.
 file.  It is an INI format configuration file.  The default search locations
 for "bspinfo.conf" are:
 
- * %APPDATA%\pyatk\bspinfo.conf (Windows)
+ * %APPDATA%\\pyatk\\bspinfo.conf (Windows)
  * ~/.pyatk/bspinfo.conf (UNIX)
  * The current working directory (all platforms)
 
@@ -148,3 +148,16 @@ The following command will dump 1 kB of a flash device, starting at address
 
 The command will dump the block to the screen in combined hex+ASCII format,
 and also dump the data directly to "dump.bin".
+
+Erasing flash memory
+----------------------------
+
+``mx-toolkit`` can also leverage the RAM kernel to erase flash memory.
+The following command will erase 128 kB of a flash device, starting at address
+0 (block 0 of a part with 128 kB blocks)::
+
+  local:~/project $ mx-toolkit.py flash erase -b mx25 0x20000
+
+NOTE: Although the tool will let you erase less than the block size of
+the flash part, be aware that your RAM kernel will likely need to erase
+the entire block anyway.  This is an inherent property of NAND flash.
